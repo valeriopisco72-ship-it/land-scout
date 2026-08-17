@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>land-scout — Dossier Terreno</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   land-scout — pagina prodotto. Applica il DESIGN SYSTEM (design/tokens.css).
+   Tesi: "NON VERIFICATO" non e' una gravita', e' un'ASSENZA.
+   Tinta = gravita' di un vincolo TROVATO. Texture (tratteggio) = incertezza.
+   Un dato che non abbiamo non deve sembrare un dato: deve sembrare un buco.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root{
+  /* verde: marchio + "verificato pulito" */
+  --g-900:#07271a; --g-800:#0d3b28; --g-700:#125437; --g-600:#177047; --g-500:#1e8a58;
+  --g-300:#7cc39d; --g-100:#e7f3ec; --g-50:#f2f8f5;
+  /* inchiostro */
+  --ink:#0f1c17; --ink-2:#3c4d46; --ink-3:#6b7d75; --ink-4:#93a29b;
+  --line:#e2eae6; --line-2:#cdd9d3; --bg:#f6f8f7; --card:#fff;
+  /* semantici: SOLO per la gravita' di un vincolo TROVATO (mai per l'incertezza) */
+  --ok:#177047;     --ok-bg:#e7f3ec;     --ok-line:#b9dcc9;
+  --attenz:#b4740a; --attenz-bg:#fdf4e3; --attenz-line:#f0d9a8;
+  --blocco:#a8322f; --blocco-bg:#fdeceb; --blocco-line:#f2c4c2;
+  --info:#1d5f8a;   --info-bg:#ebf3f9;   --info-line:#bcd7e8;
+  /* IGNOTO: il token piu' importante. Fuori dalla scala semantica, + tratteggio. */
+  --ignoto:#5a6b78; --ignoto-bg:#f0f3f5; --ignoto-line:#c2ccd4;
+  --tratteggio:repeating-linear-gradient(-45deg,transparent 0 5px,rgba(90,107,120,.10) 5px 6px);
+  /* geometria del dato: misurato (poligono) o campionato (centroide) */
+  --misurato:#125437; --campionato:#8a6d3b;
+  /* tipografia: Inter con CIFRE TABULARI (non mono). Mono solo per cio' che E' codice. */
+  --font:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono","Consolas",ui-monospace,monospace;
+  --cifre:"tnum" 1,"lnum" 1;
+  --sh-1:0 1px 2px rgba(7,39,26,.06),0 1px 3px rgba(7,39,26,.04);
+  --sh-2:0 4px 16px rgba(7,39,26,.08),0 1px 3px rgba(7,39,26,.04);
+  --r:14px; --r-s:9px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);
+     font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+/* cifre tabulari da font proporzionale: colonne allineate, leggibilita' del sans */
+.num{font-variant-numeric:tabular-nums lining-nums;font-feature-settings:var(--cifre);letter-spacing:-.01em}
+/* il mono resta per cio' che E' codice: id catastali, sigle */
+.code{font-family:var(--mono);font-size:.84em;color:var(--info);background:var(--info-bg);
+      padding:1px 5px;border-radius:4px;font-weight:500}
+
+/* ---------- header ---------- */
+header{background:linear-gradient(135deg,var(--g-900) 0%,var(--g-700) 100%);color:#fff;padding:26px 0 30px;
+       position:relative;overflow:hidden}
+header::after{content:'';position:absolute;right:-90px;top:-90px;width:320px;height:320px;border-radius:50%;
+       background:radial-gradient(circle,rgba(255,255,255,.07),transparent 70%)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 22px}
+.brand{display:flex;align-items:center;gap:11px}
+.logo{width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.14);display:grid;place-items:center;
+      backdrop-filter:blur(6px)}
+h1{font-size:21px;font-weight:800;letter-spacing:-.4px}
+.tag{margin-top:9px;font-size:13.5px;opacity:.68;display:flex;gap:7px;flex-wrap:wrap}
+.tag span{white-space:nowrap}.tag i{opacity:.4;font-style:normal}
+
+/* ---------- layout ---------- */
+main{max-width:1180px;margin:-16px auto 40px;padding:0 22px;display:grid;
+     grid-template-columns:326px 1fr;gap:20px;align-items:start}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh-2)}
+aside{position:sticky;top:18px}
+@media(max-width:900px){aside{position:static}}
+.pad{padding:20px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--g-600);
+         margin-bottom:14px;display:flex;align-items:center;gap:7px}
+
+/* ---------- form ---------- */
+label{display:block;font-size:11.5px;font-weight:600;color:var(--ink-3);margin:13px 0 5px;letter-spacing:.2px}
+input,select{width:100%;padding:10px 11px;border:1.5px solid var(--line);border-radius:var(--r-s);
+             font:inherit;font-size:14px;color:var(--ink);background:#fff;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus{outline:0;border-color:var(--g-500);box-shadow:0 0 0 3px var(--g-100)}
+input.err{border-color:var(--blocco);background:var(--blocco-bg)}
+input.err:focus{box-shadow:0 0 0 3px #f7d9d7}
+.row{display:flex;gap:9px}.row>div{flex:1}
+#map{height:200px;border-radius:var(--r-s);margin-top:13px;border:1.5px solid var(--line);z-index:0}
+.hint{font-size:11.5px;color:var(--ink-3);margin-top:7px;line-height:1.45}
+.btn{width:100%;margin-top:16px;padding:13px;background:var(--g-600);color:#fff;border:0;border-radius:var(--r-s);
+     font:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s,transform .06s;
+     display:flex;align-items:center;justify-content:center;gap:8px}
+.btn:hover:not(:disabled){background:var(--g-700)}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{background:#a9c4b7;cursor:not-allowed}
+
+/* ---------- copertura (decide cosa il dossier ha il DIRITTO di dire) ---------- */
+.cov{margin-top:13px;padding:11px 13px;background:var(--g-50);border:1px solid var(--line);
+     border-radius:var(--r-s);font-size:12px;color:var(--ink-2);line-height:1.55}
+.cov b{color:var(--g-700)}
+.cov .cov-reg{font-weight:700;color:var(--ink);letter-spacing:.3px;text-transform:uppercase;font-size:11px}
+.cov .cline{display:flex;align-items:center;gap:6px;margin-top:5px}
+.cov .dot{width:7px;height:7px;border-radius:50%;flex:none}
+.cov .dot.on{background:var(--ok)} .cov .dot.part{background:var(--attenz)}
+.cov .dot.off{background:var(--ignoto);box-shadow:0 0 0 2px var(--ignoto-bg)}
+.cov .miss{margin-top:7px;padding:6px 8px;border-radius:6px;background:var(--ignoto-bg);
+           background-image:var(--tratteggio);border:1px dashed var(--ignoto-line);
+           color:var(--ignoto);font-size:11px;line-height:1.45}
+
+/* ---------- stato / avanzamento ---------- */
+#stato{display:none;margin-bottom:18px;padding:15px 18px;background:var(--card);border:1px solid var(--line);
+       border-radius:var(--r);box-shadow:var(--sh-1);align-items:center;gap:12px}
+#stato.on{display:flex}
+.spin{width:17px;height:17px;border:2.5px solid var(--g-100);border-top-color:var(--g-600);border-radius:50%;
+      animation:sp .7s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.bar{height:3px;background:var(--g-100);border-radius:2px;overflow:hidden;margin-top:7px}
+.bar i{display:block;height:100%;width:35%;background:var(--g-500);border-radius:2px;animation:sl 1.4s ease-in-out infinite}
+@keyframes sl{0%{margin-left:-35%}100%{margin-left:100%}}
+
+/* ---------- empty ---------- */
+.empty{padding:70px 34px;text-align:center;color:var(--ink-3)}
+.empty svg{opacity:.22;margin-bottom:16px}
+.empty h3{font-size:16px;color:var(--ink-2);font-weight:600;margin-bottom:7px}
+.empty p{font-size:13.5px;max-width:400px;margin:0 auto;line-height:1.6}
+
+/* ---------- dossier ---------- */
+.dtop{padding:22px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;
+      align-items:flex-start;gap:16px;flex-wrap:wrap}
+.dtop h2{font-size:19px;font-weight:800;letter-spacing:-.3px}
+.dtop .sub{font-size:13px;color:var(--ink-3);margin-top:3px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:99px;background:var(--g-50);
+      color:var(--g-700);border:1px solid var(--line)}
+.chip.ignoto{background:var(--ignoto-bg);background-image:var(--tratteggio);color:var(--ignoto);
+      border-color:var(--ignoto-line)}
+/* avvisi di localizzazione/catasto: la mappa vince sui campi, o il catasto e' degradato */
+.locwarn{margin:0 24px;margin-top:16px;padding:10px 13px;border-radius:var(--r-s);font-size:12px;line-height:1.5;
+      background:var(--info-bg);border:1px solid var(--info-line);color:var(--info)}
+section{padding:22px 24px;border-bottom:1px solid var(--line)}
+section:last-child{border:0}
+.sh{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+.sn{width:22px;height:22px;border-radius:6px;background:var(--g-600);color:#fff;font-size:11.5px;font-weight:700;
+    display:grid;place-items:center;flex:none}
+.sh h3{font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink-2)}
+
+/* verdetto: QUATTRO stati. Tinta = gravita' trovata; tratteggio = incertezza (ortogonale). */
+.verdict{padding:14px 16px;border-radius:var(--r-s);display:flex;align-items:center;gap:12px;font-weight:600;font-size:14.5px}
+.verdict .ic{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:none;color:#fff;font-size:14px}
+.verdict small{display:block;font-weight:500;font-size:12px;opacity:.85;margin-top:2px}
+.verdict.ok{background:var(--ok-bg);color:var(--g-800);border:1px solid var(--ok-line)}
+.verdict.ok .ic{background:var(--g-600)}
+.verdict.attenz{background:var(--attenz-bg);color:#7a4f07;border:1px solid var(--attenz-line)}
+.verdict.attenz .ic{background:var(--attenz)}
+.verdict.blocco{background:var(--blocco-bg);color:var(--blocco);border:1px solid var(--blocco-line)}
+.verdict.blocco .ic{background:var(--blocco)}
+/* IGNOTO: grigio FUORI scala + tratteggio. Non e' "un po' meno grave": e' un buco. */
+.verdict.ignoto{background:var(--ignoto-bg);background-image:var(--tratteggio);color:var(--ignoto);
+      border:1px dashed var(--ignoto-line)}
+.verdict.ignoto .ic{background:var(--ignoto)}
+
+.kv{margin-top:12px;border:1px solid var(--line);border-radius:var(--r-s);overflow:hidden}
+.kv .r{display:grid;grid-template-columns:150px 1fr;font-size:13.5px}
+.kv .r+.r{border-top:1px solid var(--line)}
+.kv .k{background:var(--g-50);padding:10px 13px;font-weight:600;color:var(--ink-2);font-size:12.5px}
+.kv .v{padding:10px 13px;color:var(--ink)}
+.kv .v.unk{background:var(--ignoto-bg);background-image:var(--tratteggio);color:var(--ignoto)}
+@media(max-width:560px){.kv .r{grid-template-columns:1fr}.kv .k{border-bottom:1px solid var(--line)}}
+
+.badge{display:inline-flex;align-items:center;gap:9px;background:linear-gradient(135deg,var(--g-600),var(--g-500));
+       color:#fff;padding:11px 18px;border-radius:10px;font-weight:800;font-size:16px;letter-spacing:.5px;
+       box-shadow:0 3px 10px rgba(23,112,71,.24)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
+@media(max-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--g-50);border:1px solid var(--line);border-radius:var(--r-s);padding:14px 12px;text-align:center}
+.tile b{display:block;font-size:19px;font-weight:700;color:var(--g-700);letter-spacing:-.4px;line-height:1.25}
+.tile span{display:block;font-size:10.5px;color:var(--ink-3);margin-top:5px;font-weight:500;line-height:1.35}
+
+/* ⑤ valore: la CATENA a gradini. Ogni gradino porta la sua fonte.
+   Il gradino "banda nazionale" (VAM non caricato) = stima non ancorata -> TRATTEGGIO. */
+.chain{display:grid;gap:9px}
+.step{padding:13px 15px;border-radius:var(--r-s);border:1px solid var(--line);background:#fff}
+.step .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.step .l{font-size:13.5px;color:var(--ink-2);font-weight:600}
+.step .n{font-size:17px;font-weight:700;color:var(--g-700);white-space:nowrap}
+.step .src{font-size:11px;color:var(--ink-3);margin-top:5px;line-height:1.45}
+.step .pond{font-size:12px;color:var(--ink-2);margin-top:4px}
+.step .pond b{color:var(--g-700)}
+/* stima non ancorata: la banda nazionale non e' un valore, e' un ordine di grandezza */
+.step.unk{background:var(--ignoto-bg);background-image:var(--tratteggio);border:1px dashed var(--ignoto-line)}
+.step.unk .n{color:var(--ignoto)}
+/* il gradino RTB e' valore del developer, non del proprietario: tono informativo, non verde */
+.step.info{background:var(--info-bg);border-color:var(--info-line)}
+.step.info .n{color:var(--info)}
+.step .flag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+      padding:2px 7px;border-radius:5px;margin-left:8px;vertical-align:middle}
+.step .flag.vam{background:var(--ok-bg);color:var(--ok)}
+.step .flag.naz{background:var(--ignoto-bg);color:var(--ignoto);border:1px dashed var(--ignoto-line)}
+
+/* p_auth: probabilita' autorizzativa GROSSOLANA. Banda, non numero fine. */
+.pauth{margin-top:12px;padding:13px 15px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--g-50)}
+.pauth .h{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.pauth .h .lab{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.pauth .h .pct{font-size:20px;font-weight:800}
+.pauth .track{height:7px;border-radius:4px;background:#e6ece9;overflow:hidden;margin:9px 0 7px}
+.pauth .fill{height:100%;border-radius:4px}
+.pauth .why{font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.conf{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;
+      margin-top:10px}
+.conf.bassa{background:var(--attenz-bg);color:var(--attenz);border:1px solid var(--attenz-line)}
+.conf.media{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
+
+/* ⑥ aziende */
+.co{display:grid;gap:9px}
+.crow{display:flex;align-items:center;gap:13px;padding:12px 14px;border:1px solid var(--line);
+      border-radius:var(--r-s);background:#fff;transition:border-color .15s,box-shadow .15s}
+.crow:hover{border-color:var(--g-500);box-shadow:var(--sh-1)}
+.rk{width:26px;height:26px;border-radius:7px;background:var(--g-800);color:#fff;font-size:12px;font-weight:700;
+    display:grid;place-items:center;flex:none}
+.crow:first-child .rk{background:linear-gradient(135deg,var(--g-600),var(--g-500))}
+.cinfo{flex:1;min-width:0}
+.cname{font-weight:700;font-size:14px;letter-spacing:-.1px}
+.cname a{margin-left:7px;font-size:10.5px;font-weight:600;color:var(--g-600);text-decoration:none;
+         border:1px solid var(--line);padding:1px 6px;border-radius:4px}
+.cname a:hover{background:var(--g-50)}
+.cmeta{font-size:12px;color:var(--ink-3);margin-top:2px}
+.cdist{font-size:12px;font-weight:700;color:var(--g-700);background:var(--g-50);padding:5px 9px;
+       border-radius:6px;white-space:nowrap;flex:none}
+
+.note{font-size:11.5px;color:var(--ink-3);margin-top:11px;line-height:1.55}
+.warn{margin-top:11px;padding:10px 12px;background:var(--attenz-bg);border:1px solid var(--attenz-line);
+      border-radius:var(--r-s);font-size:12px;color:#7a4f07;line-height:1.5}
+/* avviso di ASSENZA (fonte non caricata / non raggiunta): tratteggio, non ambra */
+.warn.unk{background:var(--ignoto-bg);background-image:var(--tratteggio);border:1px dashed var(--ignoto-line);
+      color:var(--ignoto)}
+footer{max-width:1180px;margin:0 auto 34px;padding:0 22px;font-size:11.5px;color:var(--ink-3);line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9"/></svg></div>
+      <h1>land-scout</h1>
+    </div>
+    <div class="tag"><span>È fattibile?</span><i>·</i><span>Quale energia?</span><i>·</i><span>Quanto produce?</span>
+      <i>·</i><span>Quanto vale?</span><i>·</i><span>Chi contattare?</span></div>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <div class="panel pad">
+      <div class="eyebrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 21s-7-6-7-11a7 7 0 1114 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>Il tuo terreno</div>
+      <label>Comune</label><input id="comune" value="Morcone">
+      <div class="row">
+        <div><label>Provincia</label><input id="prov" value="BN" maxlength="2"></div>
+        <div><label>Ettari</label><input id="ha" type="number" step="0.01" value="12.28"></div>
+      </div>
+      <div class="row">
+        <div><label>Latitudine</label><input id="lat" type="number" step="0.00001" value="42.333"></div>
+        <div><label>Longitudine</label><input id="lon" type="number" step="0.00001" value="13.711"></div>
+      </div>
+      <label>Tecnologia</label>
+      <select id="tech"><option value="">Falla scegliere al tool</option><option>agriPV</option><option>BESS</option><option>PV</option></select>
+      <div id="map"></div>
+      <div class="hint">Clicca sulla mappa o trascina il segnaposto per posizionare il terreno.</div>
+      <button class="btn" id="go">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/></svg>
+        Genera dossier</button>
+      <div class="cov" id="cov"></div>
+    </div>
+  </aside>
+
+  <div>
+    <div id="stato">
+      <div class="spin"></div>
+      <div style="flex:1"><div style="font-weight:600;font-size:14px" id="statotxt">…</div>
+        <div class="bar"><i></i></div></div>
+    </div>
+    <div class="panel" id="out">
+      <div class="empty">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
+        <h3>Nessun dossier generato</h3>
+        <p>Inserisci il terreno e premi <b>Genera dossier</b>. L'analisi richiede circa un minuto:
+           interroga catasto, Natura 2000, SITAP, PVGIS, Overpass e il censimento VIA nazionale.</p>
+      </div>
+    </div>
+  </div>
+</main>
+<footer>
+  Screening automatico su dati pubblici ufficiali (Catasto AdE · Natura 2000 EEA · Carta Habitat · SITAP-MiC ·
+  PAI ISPRA · PVGIS · portale VIA). <b>Non sostituisce</b> la VINCA, la perizia estimativa né le visure catastali.
+  Le code di connessione non sono automatizzabili e provengono da un registro compilato a mano.
+  Dove una fonte non risponde o non copre la zona, il dossier lo dichiara (<span style="border-bottom:1px dashed var(--ignoto-line)">tratteggio</span>) invece di dare per pulito.
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const map = L.map('map',{zoomControl:true}).setView([42.333,13.711],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OSM'}).addTo(map);
+const marker = L.marker([42.333,13.711],{draggable:true}).addTo(map);
+const setLL=(la,lo)=>{$('lat').value=la.toFixed(5);$('lon').value=lo.toFixed(5)};
+map.on('click',e=>{marker.setLatLng(e.latlng);setLL(e.latlng.lat,e.latlng.lng)});
+marker.on('dragend',e=>{const p=e.target.getLatLng();setLL(p.lat,p.lng)});
+const sync=()=>{const la=parseFloat($('lat').value),lo=parseFloat($('lon').value);
+  if(!isNaN(la)&&!isNaN(lo)){marker.setLatLng([la,lo]);map.panTo([la,lo])}};
+$('lat').addEventListener('change',sync);$('lon').addEventListener('change',sync);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ── copertura: sta in cima perche' decide quali frasi il dossier ha il DIRITTO di dire.
+//    I layer che NON coprono la regione vanno mostrati come ASSENZA (tratteggio), non silenzio.
+async function copertura(){
+  const p=$('prov').value.trim().toUpperCase();
+  if(p.length!==2){$('cov').innerHTML='';return}
+  try{
+    const r=await fetch('/api/copertura/'+p); if(!r.ok) throw 0;
+    const c=await r.json();
+    const hab = c.habitat_regionale ? ['on','carta regionale']
+              : (c.habitat ? ['part','ISPRA — indicativo'] : ['off','non verificato']);
+    const sit = c.sitap ? ['on',(c.sitap_layer?c.sitap_layer.length:0)+'/7 layer paesaggio']
+                        : ['off','non coperta'];
+    let h=`<div class="cov-reg">${esc(c.regione||p)}</div>`
+      + `<div class="cline"><span class="dot ${hab[0]}"></span>habitat divieto FV: <b>${hab[1]}</b></div>`
+      + `<div class="cline"><span class="dot ${sit[0]}"></span>paesaggio SITAP: <b>${sit[1]}</b></div>`
+      + `<div class="cline"><span class="dot on"></span>Natura 2000: <b>nazionale</b></div>`;
+    const miss=(c.sitap_mancanti||[]);
+    if(!c.sitap) h+=`<div class="miss">SITAP non mappa <b>${esc(c.regione||'questa regione')}</b>: paesaggio e usi civici <b>non verificabili qui</b>.</div>`;
+    else if(miss.length) h+=`<div class="miss">non verificabile qui: ${miss.map(esc).join(', ')}</div>`;
+    $('cov').innerHTML=h;
+  }catch(e){$('cov').innerHTML='<div class="miss">provincia non riconosciuta</div>'}
+}
+$('prov').addEventListener('change',copertura); copertura();
+
+const eur=n=>'€'+(Math.round(n)||0).toLocaleString('it-IT');
+const eurk=n=>'€'+Math.round((n||0)/1000).toLocaleString('it-IT')+'k';
+const kNum=n=>(n||0).toLocaleString('it-IT');
+const S=(n,t,body)=>`<section><div class="sh"><div class="sn">${n}</div><h3>${t}</h3></div>${body}</section>`;
+
+// verdetto -> stato del design system. Tinta = gravita' TROVATA; tratteggio = incertezza.
+function verdictState(verdetti, haBan){
+  const keys=Object.keys(verdetti||{});
+  const has=re=>keys.some(k=>re.test(k));
+  if(haBan>0 || has(/BLOCK_HABITAT/)) return {c:'blocco',ic:'✕',t:'BLOCCO — divieto FV su habitat protetto',
+    s:haBan>0?`${haBan} ha su habitat 6210/6220: il FV è vietato (DGR 617/2024). Il divieto è dell'habitat, non della particella — si può arretrare.`:'Divieto FV su habitat protetto.'};
+  if(has(/usi civici|TITOLO/)) return {c:'blocco',ic:'!',t:'TITOLO — usi civici da affrancare',
+    s:'Il titolo non è liberamente disponibile finché gli usi civici non sono affrancati: rischio per la vendita.'};
+  // l'assenza di risposta e' ortogonale alla gravita': va PRIMA del "pulito", mai come "quasi pulito"
+  if(has(/NON VERIFICAT/)) return {c:'ignoto',ic:'?',t:'NON VERIFICATO — non abbiamo potuto guardare',
+    s:'Nessun vincolo trovato, ma una fonte decisiva non ha risposto. Non è un via libera: è l\'assenza di una verifica. Riprova più tardi.'};
+  if(has(/VINCA|PAESAGGIO/)) return {c:'attenz',ic:'~',t:'VINCA — iter ordinario, nessuna preclusione',
+    s:'Dentro Natura 2000 (ZPS/SIC) o area paesaggistica: serve Valutazione di Incidenza. Impegnativa, non preclusiva.'};
+  if(has(/PARZIALE/)) return {c:'ok',ic:'✓',t:'PULITO — verifica parziale',
+    s:'Nessun vincolo trovato fra quelli controllabili qui. Alcuni controlli non coprono questa regione (vedi sotto).'};
+  return {c:'ok',ic:'✓',t:'PULITO — verifica completa',
+    s:'Tutte le fonti hanno risposto e coprono questa provincia. Nessun vincolo trovato fra quelli controllati.'};
+}
+
+function render(d){
+  const f=d.fattibilita,cov=f.copertura||{},t=d.tecnologia,r=d.resa||{},v=d.valore_eur||{},
+        rd=d.rete_distanza||{},nodo=d.rete||{};
+  const haBan=f.ha_habitat_vietato||0, manc=cov.sitap_mancanti||[];
+  const vs=verdictState(f.verdetti,haBan);
+
+  let h=`<div class="dtop"><div><h2>${esc(d.comune)} <span style="color:var(--ink-3);font-weight:600">(${esc(d.prov)})</span></h2>
+    <div class="sub"><span class="num">${d.n}</span> particelle · <span class="num">${d.tot_ha}</span> ha · ${esc(cov.regione||'')}</div></div>
+    <div class="chips"><div class="chip">${esc((t.consigliata||'—').toUpperCase())}</div>
+    ${nodo.verificato?'<div class="chip">nodo noto</div>':'<div class="chip ignoto">coda non nota</div>'}</div></div>`;
+
+  // avvisi di localizzazione/catasto (la mappa vince sui campi; catasto degradato)
+  (d.avvisi_luogo||[]).forEach(a=>{ h+=`<div class="locwarn">⚑ ${esc(a)}</div>`; });
+
+  // ① fattibilità — verdetto a 4 stati
+  let b=`<div class="verdict ${vs.c}"><div class="ic">${vs.ic}</div>
+    <div>${esc(vs.t)}<small>${esc(vs.s)}</small></div></div>
+    <div class="kv"><div class="r"><div class="k">Esito particelle</div><div class="v">
+      ${Object.entries(f.verdetti||{}).map(([k,n])=>`<b class="num">${n}</b> ${esc(k)}`).join(' · ')||'—'}</div></div>
+    <div class="r"><div class="k">Usi civici</div>${
+      manc.includes('usi_civici')?`<div class="v unk">non verificabili — SITAP non copre gli usi civici in ${esc(cov.regione||'')}</div>`
+      :(!f.sitap_ok?'<div class="v unk">da verificare — SITAP non raggiunto</div>'
+      :(f.usi_civici_n?`<div class="v"><b class="num">${f.usi_civici_n}</b> particelle da verificare</div>`:'<div class="v">✓ nessuno — titolo libero</div>'))}</div>
+    <div class="r"><div class="k">Fonte habitat</div><div class="v">${esc(cov.habitat_fonte||'—')}</div></div></div>`;
+  if(!cov.habitat_regionale) b+=`<div class="warn">Carta habitat regionale assente per ${esc(cov.regione||'questa regione')}:
+    dato ISPRA 1:50.000 + corrispondenza ufficiale CORINE→Direttiva Habitat — <b>fondato ma indicativo</b>, conferma sulla cartografia regionale.</div>`;
+  if(manc.length) b+=`<div class="warn unk">Controlli non disponibili in ${esc(cov.regione||'')}: <b>${manc.map(esc).join(', ')}</b>. Qui il tool non può dire "pulito" su questi layer.</div>`;
+  h+=S(1,'Fattibilità autorizzativa',b);
+
+  // ② tecnologia
+  h+=S(2,'Tecnologia consigliata',`<div class="badge">${esc((t.consigliata||'—').toUpperCase())}</div>
+    <div class="note">Distribuzione particelle: ${Object.entries(t.distribuzione||{}).map(([k,n])=>`<span class="num">${n}</span>× ${esc(k)}`).join(' · ')||'—'}</div>`);
+
+  // ③ rete — distanza (automatica) + coda (registro manuale, o ASSENZA)
+  const dist = rd.verificato
+    ? `<div class="v">stazione elettrica <b class="num">${rd.d_se_m!=null?(rd.d_se_m/1000).toFixed(1)+' km':'n.d.'}</b> ·
+         linea ${rd.linea_kv||'?'} kV <b class="num">${rd.d_linea_m!=null?(rd.d_linea_m/1000).toFixed(1)+' km':'n.d.'}</b></div>`
+    : `<div class="v unk">non calcolata — Overpass non raggiunto</div>`;
+  const coda = nodo.verificato
+    ? `<div class="v">${nodo.pv_queue_mw===0?'<b>coda FV vuota</b> — primo arrivato sul solare':`<span class="num">${nodo.pv_queue_mw||0}</span> MW FV`} ·
+         <span class="num">${kNum(nodo.bess_queue_mw)}</span> MW BESS · rilievo ${esc(nodo.data||'')}${nodo.scaduto?' · <b>RIVERIFICARE</b>':''}</div>`
+    : `<div class="v unk">coda non nota — Terna non è automatizzabile, verifica su Econnextion</div>`;
+  h+=S(3,'Rete / connessione',`<div class="kv">
+    <div class="r"><div class="k">Distanza</div>${dist}</div>
+    <div class="r"><div class="k">Coda al nodo</div>${coda}</div></div>
+    <div class="note">Distanza da OSM: indicativa, la soluzione di connessione (TICA) la rilascia il gestore.</div>`);
+
+  // ④ produzione
+  if(!r.error&&r.mwp) h+=S(4,'Produzione attesa',`<div class="tiles">
+    <div class="tile"><b class="num">${Math.round(r.kwh_per_kwp)}</b><span>kWh/kWp/anno<br>resa del sito</span></div>
+    <div class="tile"><b class="num">${r.mwp[0]}–${r.mwp[1]}</b><span>MWp installabili<br>su ${d.tot_ha} ha</span></div>
+    <div class="tile"><b class="num">${kNum(r.mwh_anno[0])}–${kNum(r.mwh_anno[1])}</b><span>MWh/anno<br>produzione</span></div>
+    <div class="tile"><b class="num">${eurk(r.ricavi_impianto_eur_anno[0])}–${eurk(r.ricavi_impianto_eur_anno[1])}</b><span>ricavi impianto<br>all'anno</span></div>
+    </div><div class="note">${esc(r.config||'')} · ${esc(r.fonte||'')}. I ricavi sono <b>dell'impianto (del developer)</b>,
+    lordi di capex e O&amp;M su 25-30 anni: servono a dimensionare la torta, non sono reddito del proprietario.</div>`);
+  else if(r.error) h+=S(4,'Produzione attesa',`<div class="warn unk">PVGIS non raggiunto: resa non calcolata (${esc(r.error)}).</div>`);
+
+  // ⑤ valore — la CATENA a gradini (contratto nuovo: v.gradini[] + p_auth)
+  h+=S(5,'Valore indicativo della terra',renderValore(v));
+
+  // ⑥ aziende
+  const az=(d.aziende||[]).filter(a=>/match|affine/.test(a.why_tech||''));
+  const lista=(az.length?az:d.aziende||[]).slice(0,6);
+  h+=S(6,'Aziende da contattare',`<div class="co">${lista.map((a,i)=>`
+    <div class="crow"><div class="rk num">${i+1}</div><div class="cinfo">
+      <div class="cname">${esc(a.known?a.known[0]:a.proponente)}${a.link?` <a href="${esc(a.link)}" target="_blank" rel="noopener">VIA ↗</a>`:''}</div>
+      <div class="cmeta">${esc(a.known?a.known[1]:'capogruppo da visura camerale')} · ${esc(a.why_tech||'')} · <span class="num">${Math.round(a.mw||0)}</span> MW</div>
+    </div><div class="cdist num">${a.dist_km?a.dist_km+' km':esc(a.why_geo||'')}</div></div>`).join('')||'<div class="note">Nessuna azienda in target trovata nel censimento VIA per questa zona.</div>'}</div>
+    <div class="note">Ordinate per prossimità geografica (progetti già in iter vicino al terreno) + tecnologia + contatti noti.
+    "visura camerale" = il proponente è una società veicolo: il gruppo reale si ricava con una visura (~7€).</div>`);
+
+  $('out').innerHTML=h;
+}
+
+// ⑤ dettaglio: rende la catena del valore rispettando la fonte di ogni gradino.
+function renderValore(v){
+  if(v.errore) return `<div class="warn unk">${esc(v.errore)}</div>`;
+  const g=v.gradini||[];
+  let rows=g.map(s=>{
+    const naz = s.base==='nazionale';          // banda nazionale = stima non ancorata -> tratteggio
+    const rtb = /RTB/i.test(s.nome||'');        // valore del developer, non del proprietario -> info
+    const cls = naz?'step unk':(rtb?'step info':'step');
+    const flag = s.base==='vam'?'<span class="flag vam">VAM ufficiale</span>'
+               : naz?'<span class="flag naz">banda nazionale</span>':'';
+    const rng = s.range_eur ? `${eur(s.range_eur[0])} – ${eur(s.range_eur[1])}` : '—';
+    let inner=`<div class="top"><div class="l">${esc(s.nome)}${flag}</div><div class="n num">${rng}</div></div>`;
+    if(s.range_eur_ponderato) inner+=`<div class="pond">ponderato per p_auth: <b class="num">${eur(s.range_eur_ponderato[0])} – ${eur(s.range_eur_ponderato[1])}</b></div>`;
+    inner+=`<div class="src">${esc(s.fonte||'')}</div>`;
+    return `<div class="${cls}">${inner}</div>`;
+  }).join('');
+
+  // p_auth: probabilita' autorizzativa grossolana (banda, non numero fine)
+  const p=v.p_auth, pct=Math.round((p||0)*100);
+  const col = p<=0.15?'var(--blocco)': p<0.5?'var(--attenz)': p<0.75?'var(--g-500)':'var(--g-600)';
+  const meter=`<div class="pauth"><div class="h"><span class="lab">Probabilità autorizzativa (grossolana)</span>
+      <span class="pct num" style="color:${col}">${pct}%</span></div>
+    <div class="track"><div class="fill" style="width:${pct}%;background:${col}"></div></div>
+    <div class="why">${esc(v.p_auth_perche||'')}</div>
+    <span class="conf ${esc(v.confidenza||'bassa')}">confidenza ${esc(v.confidenza||'bassa')}</span></div>`;
+
+  let warns=(v.avvisi||[]).map(a=>`<div class="warn ${/non caricat|non raggiunt/i.test(a)?'unk':''}">${esc(a)}</div>`).join('');
+  const note=`<div class="note">Non è una perizia: è uno screening su dati pubblici. La VINCA (~2-3 anni, €20-45k)
+    la sostiene il developer → struttura consigliata <b>base subito + premio a VINCA superata</b> (earn-out).</div>`;
+  return `<div class="chain">${rows}</div>${meter}${warns}${note}`;
+}
+
+$('go').onclick=async()=>{
+  const pv=$('prov').value.trim().toUpperCase();
+  $('prov').classList.toggle('err', pv.length!==2);
+  if(pv.length!==2){ $('prov').focus();
+    $('out').innerHTML='<div class="empty"><h3>Manca la provincia</h3><p>Inserisci la sigla della provincia (es. <b>BN</b>): '
+      +'determina quali verifiche il tool può fare in quella regione.</p></div>'; return; }
+  const haV=parseFloat($('ha').value);
+  $('ha').classList.toggle('err', !(haV>0));
+  if(!(haV>0)){ $('ha').focus();
+    $('out').innerHTML='<div class="empty"><h3>Ettari mancanti</h3><p>Indica la superficie del terreno (maggiore di zero).</p></div>'; return; }
+  $('go').disabled=true; $('stato').classList.add('on'); $('statotxt').textContent='Invio richiesta…';
+  $('out').innerHTML='<div class="empty"><h3>Analisi in corso</h3><p>Interrogazione delle fonti ufficiali…</p></div>';
+  try{
+    const body={comune:$('comune').value,prov:$('prov').value.toUpperCase(),
+                lat:parseFloat($('lat').value),lon:parseFloat($('lon').value),
+                ha:parseFloat($('ha').value),tech:$('tech').value||null};
+    const r=await fetch('/api/dossier',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok) throw new Error((await r.json()).detail||'errore');
+    const {job_id}=await r.json();
+    while(true){
+      await new Promise(s=>setTimeout(s,2000));
+      const j=await(await fetch('/api/dossier/'+job_id)).json();
+      $('statotxt').textContent=j.progresso||j.stato;
+      if(j.stato==='completato'){$('stato').classList.remove('on');render(j.risultato);break}
+      if(j.stato==='errore'){$('stato').classList.remove('on');
+        $('out').innerHTML='<div class="empty"><h3>Errore</h3><p>'+esc(j.errore)+'</p></div>';break}
+    }
+  }catch(e){$('stato').classList.remove('on');
+    $('out').innerHTML='<div class="empty"><h3>Errore</h3><p>'+esc(e.message)+'</p></div>'}
+  $('go').disabled=false;
+};
+</script>
+</body>
+</html>

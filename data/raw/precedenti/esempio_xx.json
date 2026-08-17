@@ -1,0 +1,1028 @@
+{
+ "comune": "Esempio",
+ "prov": "XX",
+ "fonte": "dati sintetici — nessuna pratica reale",
+ "aggiornato": null,
+ "voci": [
+  {
+   "cup": "X00",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 0 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X01",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 1 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "11",
+     "101"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X02",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 2 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "12",
+     "102"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X03",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 3 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X04",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 4 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "14",
+     "104"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X05",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 5 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "15",
+     "105"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X06",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 6 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X07",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 7 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "10",
+     "107"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X08",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 8 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "11",
+     "108"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X09",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 9 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X10",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 10 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "13",
+     "110"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X11",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 11 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "14",
+     "111"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X12",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 12 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X13",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 13 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "16",
+     "113"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X14",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 14 (dati sintetici)",
+   "tipo": [
+    "edilizia"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "10",
+     "114"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X15",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 15 (dati sintetici)",
+   "tipo": [
+    "edilizia"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X16",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 16 (dati sintetici)",
+   "tipo": [
+    "edilizia"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "12",
+     "116"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X17",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 17 (dati sintetici)",
+   "tipo": [
+    "edilizia"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "13",
+     "117"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X18",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 18 (dati sintetici)",
+   "tipo": [
+    "edilizia"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X19",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 19 (dati sintetici)",
+   "tipo": [
+    "edilizia"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "15",
+     "119"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X20",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 20 (dati sintetici)",
+   "tipo": [
+    "taglio_bosco"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE CON PRESCRIZIONI",
+   "motivo": null,
+   "particelle": [
+    [
+     "16",
+     "120"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X21",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 21 (dati sintetici)",
+   "tipo": [
+    "taglio_bosco"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X22",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 22 (dati sintetici)",
+   "tipo": [
+    "taglio_bosco"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "11",
+     "122"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X23",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 23 (dati sintetici)",
+   "tipo": [
+    "taglio_bosco"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "12",
+     "123"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X24",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 24 (dati sintetici)",
+   "tipo": [
+    "taglio_bosco"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X25",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 25 (dati sintetici)",
+   "tipo": [
+    "taglio_bosco"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "14",
+     "125"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X26",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 26 (dati sintetici)",
+   "tipo": [
+    "viabilita"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "15",
+     "126"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X27",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 27 (dati sintetici)",
+   "tipo": [
+    "viabilita"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X28",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 28 (dati sintetici)",
+   "tipo": [
+    "reti"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "10",
+     "128"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X29",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 29 (dati sintetici)",
+   "tipo": [
+    "reti"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "11",
+     "129"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X30",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 30 (dati sintetici)",
+   "tipo": [
+    "imboschimento"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X31",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 31 (dati sintetici)",
+   "tipo": [
+    "imboschimento"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "13",
+     "131"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X32",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 32 (dati sintetici)",
+   "tipo": [
+    "agricolo"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "14",
+     "132"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X33",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 33 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X34",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 34 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "16",
+     "134"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X35",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 35 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "FAVOREVOLE",
+   "motivo": null,
+   "particelle": [
+    [
+     "10",
+     "135"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X36",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 36 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "NON CONCLUSA",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X37",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 37 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "NON CONCLUSA",
+   "motivo": null,
+   "particelle": [
+    [
+     "12",
+     "137"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X38",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 38 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "NON CONCLUSA",
+   "motivo": null,
+   "particelle": [
+    [
+     "13",
+     "138"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X39",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 39 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "NON CONCLUSA",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X40",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 40 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "NON CONCLUSA",
+   "motivo": null,
+   "particelle": [
+    [
+     "15",
+     "140"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X41",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 41 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "NON CONCLUSA",
+   "motivo": null,
+   "particelle": [
+    [
+     "16",
+     "141"
+    ]
+   ],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X42",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 42 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITyyyyyyy (secondo sito di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Appropriata",
+   "esito": "NON CONCLUSA",
+   "motivo": null,
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  },
+  {
+   "cup": "X43",
+   "proponente": null,
+   "oggetto": "intervento di esempio n. 43 (dati sintetici)",
+   "tipo": [
+    "recinzione"
+   ],
+   "citati": [],
+   "sito": "ITxxxxxxx (sito Natura 2000 di esempio)",
+   "gestore": "Ente gestore di esempio",
+   "procedura": "Screening",
+   "esito": "NEGATIVO",
+   "motivo": "DIVIETO ASSOLUTO su habitat 6210(*)/6220*: le misure di conservazione vietano modifica della destinazione d uso, forestazione, coltivazione, irrigazione, bruciatura, spietramento.",
+   "particelle": [],
+   "ha": null,
+   "data": null,
+   "giorni_istruttoria": null,
+   "prescrizioni": [],
+   "documento": null
+  }
+ ]
+}

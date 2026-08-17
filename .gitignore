@@ -1,0 +1,29 @@
+# ambiente
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# DATI LOCALI: mai in questo repository.
+# Il repo pubblico contiene solo codice e fixture sintetiche. Catasto, visure,
+# registri con nomi di proponenti, comparabili di prezzo e output di run reali
+# restano fuori. Un run dei test ripopola data/cache/: non va committato.
+data/cache/
+data/private/
+data/canonical/
+data/raw/catasto/
+data/raw/precedenti/*.json
+!data/raw/precedenti/esempio_xx.json
+demo/
+legacy/
+validation/
+AUDIT_*.md
+*_ditte_*.csv
+*_visure_*.csv
+Visura_*.pdf
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
