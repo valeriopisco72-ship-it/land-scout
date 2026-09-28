@@ -8,7 +8,7 @@ BASE = str(Path(__file__).resolve().parent.parent)   # radice auto-rilevata (no 
 sys.path.insert(0, BASE)
 sys.stdout.reconfigure(encoding='utf-8')
 from landscout.engine import score_parcel, price_parcel, voto_10, m_per_deg
-from landscout.config import latlon, BAN_CODES
+from landscout.config import latlon, lonlat_gradi, BAN_CODES, CoordinataNonValida
 # lo stesso validatore del percorso vincoli: un 200 con dentro un errore non e' un dato
 from landscout.vincoli import json_valido
 from landscout.forbice import forbice, compatta
@@ -103,7 +103,7 @@ def main(argv=None):
     # NON verificato. E un anello che non e' in gradi (servizio che ignora outSR)
     # non si proietta a caso: rende il dato non verificato.
     n2k_polys = []
-    n2k_risposte, n2k_errori = 0, []
+    n2k_risposte, n2k_errori, n2k_fuori_crs = 0, [], 0
     eea = 'https://bio.discomap.eea.europa.eu/arcgis/rest/services/ProtectedSites/Natura2000Sites/MapServer'
     for lyr in (0, 1, 2):
         p = {'f': 'json', 'geometry': f'{lonmin-0.02},{latmin-0.02},{lonmax+0.02},{latmax+0.02}',
@@ -113,18 +113,27 @@ def main(argv=None):
         try:
             d = json_valido(get(f'{eea}/{lyr}/query?' + urllib.parse.urlencode(p)),
                             'features', f'EEA layer {lyr}')
-            nuovi = []
             for f in d.get('features', []):
                 code = (f.get('attributes') or {}).get('SITECODE')
                 for ringg in (f.get('geometry') or {}).get('rings', []):
-                    nuovi.append((code, Polygon([to_xy(*latlon(v[0], v[1])) for v in ringg])))
-            n2k_polys += nuovi
+                    # anello per anello: un vertice oltre confine (sito transfrontaliero)
+                    # e' un grado valido e passa; un anello in metri si CONTA e rende
+                    # Natura 2000 non verificata, invece di buttare il layer intero
+                    try:
+                        n2k_polys.append((code, Polygon([to_xy(*lonlat_gradi(v[0], v[1]))
+                                                         for v in ringg])))
+                    except CoordinataNonValida:
+                        n2k_fuori_crs += 1
+                    except Exception:
+                        pass            # anello degenere (<4 vertici): non e' un'area
             n2k_risposte += 1
         except Exception as e:
             n2k_errori.append(f'layer {lyr}: {str(e)[:60]}')
             print('EEA layer', lyr, 'fail:', str(e)[:60])
         time.sleep(0.4)
-    n2k_ok = n2k_risposte > 0
+    if n2k_fuori_crs:
+        n2k_errori.insert(0, f'{n2k_fuori_crs} anelli non in gradi (outSR ignorato?)')
+    n2k_ok = n2k_risposte > 0 and not n2k_fuori_crs
     n2k_u = unary_union([g for _, g in n2k_polys]) if n2k_polys else None
     print('N2K: siti-anelli', len(n2k_polys), '| codici:', sorted({c for c, _ in n2k_polys}),
           '' if n2k_ok else '| NON VERIFICATO')

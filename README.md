@@ -7,7 +7,7 @@ individual cadastral parcels, aggregates them into contiguous blocks large enoug
 worth a developer's attention, and reports what would stop the project — before anyone
 spends money on it.
 
-50 modules · 16,000+ lines · **1,067 tests** across 29 files.
+50 modules · 16,000+ lines · **1,077 tests** across 29 files.
 
 Code and comments are in Italian: the domain is Italian law and Italian cadastral data,
 and translating the terminology would make the regulatory references harder to verify,

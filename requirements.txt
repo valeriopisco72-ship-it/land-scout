@@ -1,5 +1,5 @@
 # land-scout — ambiente verificato l'08/08/2026 con 590/590 test verdi
-# (riverificato il 28/09/2026 su Python 3.12: 1067/1067).
+# (riverificato il 28/09/2026 su Python 3.12: 1077/1077).
 # Congelato con `pip freeze` dal venv che li fa passare: prima di questo file
 # nessuna dipendenza era dichiarata e il tool non partiva su un'altra macchina.
 #   .venv/Scripts/python -m pip install -r requirements.txt

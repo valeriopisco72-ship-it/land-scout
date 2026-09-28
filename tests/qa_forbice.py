@@ -497,6 +497,43 @@ t('recommend: se tutte le tecnologie sono in classe D, top = None',
 t('...e la sintesi non scrive "Tecnologia consigliata"',
   'consigliata' not in (r_d['sintesi'] or ''), r_d['sintesi'], grave=True)
 
+print('\n[14] CLI forbice: usa la forbice salvata dallo scan, e accetta una lista nuda')
+
+righe_cli = json.load(open(b_ok + '.json', encoding='utf-8'))['risultati']
+
+
+def cli(argv):
+    buf, vero = io.StringIO(), sys.stdout
+    sys.stdout = buf
+    try:
+        return F.main(argv), None, buf.getvalue()
+    except Exception as e:      # noqa: BLE001
+        return None, e, buf.getvalue()
+    finally:
+        sys.stdout = vero
+
+
+out, e, log = cli(['--scan', b_ok + '.json'])
+t('la CLI gira sullo scan', e is None, repr(e), grave=True)
+if out:
+    per_pla = {r['pla']: fb for r, fb in out}
+    t('i numeri della CLI sono quelli della riga (penalita OSM e SITAP comprese)',
+      all(per_pla[r['pla']]['voto'] == r['forbice']['voto']
+          and per_pla[r['pla']]['voto_peggiore'] == r['forbice']['voto_peggiore']
+          for r in righe_cli), str([(per_pla[r['pla']]['voto'], r['forbice']['voto'])
+                                    for r in righe_cli]), grave=True)
+lista = os.path.join(tempfile.mkdtemp(), 'lista.json')
+json.dump(righe_cli, open(lista, 'w', encoding='utf-8'))
+out, e, log = cli(['--scan', lista])
+t('un JSON che e una lista di righe non fa crashare la CLI', e is None and out,
+  repr(e), grave=True)
+vecchie = [{k: v for k, v in r.items() if k != 'forbice'} for r in righe_cli]
+vecchio = os.path.join(tempfile.mkdtemp(), 'vecchio.json')
+json.dump({'tech': 'agriPV', 'risultati': vecchie}, open(vecchio, 'w', encoding='utf-8'))
+out, e, log = cli(['--scan', vecchio])
+t('uno scan vecchio (senza forbice) si ricalcola, e lo dice',
+  e is None and bool(out) and 'ricalcolat' in log.lower(), repr(e) + log[-200:], grave=True)
+
 print('\n' + '=' * 72)
 print(f'  RISULTATO: {OK}/{OK+FAIL} pass   ·   {FAIL} FAIL ({len(GRAVI)} gravi)')
 if GRAVI:

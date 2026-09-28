@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # niente path 
 from landscout.engine import m_per_deg
 from landscout.config import (EP, UA, TIMEOUT, SITAP_LAYERS, BAN_CODES, HABITAT_ZIP,
                               HABITAT_PREFIX, copertura, sitap_layers, CHIAVI_SITAP,
-                              CORINE_BAN, latlon, CoordinataNonValida)
+                              CORINE_BAN, latlon, lonlat_gradi, CoordinataNonValida)
 from landscout.cache import cached_file
 from shapely.geometry import Polygon, MultiPolygon, LineString, Point, GeometryCollection, shape
 from shapely.ops import unary_union
@@ -254,12 +254,23 @@ def pai(parcels, to_xy, margine=0.01):
 
     frane, idro = {}, {}
     risposte, errori = 0, []
-    fuori_crs = [0]         # feature scartate perche' non in gradi: vedi _geom_4326
+    fuori_crs = [0]         # feature illeggibili (CRS, classe, forma): vedi _geom_4326
 
     def geom(ft):
+        # QUALSIASI errore su una feature si conta e si va avanti: un'eccezione che
+        # risale interromperebbe il ciclo e le feature successive (magari la P4)
+        # sparirebbero con il layer gia' contato come "risposto" (revisione 28/09/2026)
         try:
             return _geom_4326(ft.get('geometry'), to_xy)
-        except CoordinataNonValida:
+        except Exception:
+            fuori_crs[0] += 1
+            return None
+
+    def classe(ft):
+        c = (ft.get('properties') or {}).get('cod_per_it')
+        try:
+            return None if c is None else int(c)
+        except (TypeError, ValueError):
             fuori_crs[0] += 1
             return None
     global _IDROGEO_GIU
@@ -275,12 +286,12 @@ def pai(parcels, to_xy, margine=0.01):
         _IDROGEO_GIU = None
     try:
         d = scarica('idrogeo:pericolosita_frane')
-        risposte += 1
         for ft in d.get('features', []):
-            c = (ft.get('properties') or {}).get('cod_per_it')
+            c = classe(ft)
             g = geom(ft)
             if g is not None and c is not None:
-                frane.setdefault(int(c), []).append(g)
+                frane.setdefault(c, []).append(g)
+        risposte += 1
     except Exception as e:
         errori.append(f'frane: {str(e)[:60]}')
         if _e_di_rete(e):
@@ -291,11 +302,11 @@ def pai(parcels, to_xy, margine=0.01):
     for lvl, lay in ((1, 'p1'), (2, 'p2'), (3, 'p3')):
         try:
             d = scarica('idrogeo:pericolosita_idraulica_' + lay)
-            risposte += 1
             for ft in d.get('features', []):
                 g = geom(ft)
                 if g is not None:
                     idro.setdefault(lvl, []).append(g)
+            risposte += 1
         except Exception as e:
             errori.append(f'idraulica {lay}: {str(e)[:60]}')
 
@@ -305,7 +316,8 @@ def pai(parcels, to_xy, margine=0.01):
     # E una feature che non si e' potuta collocare vale quanto un layer muto: il
     # poligono scartato potrebbe essere proprio la P4 sotto la particella.
     if fuori_crs[0]:
-        errori.append(f'{fuori_crs[0]} poligoni non in gradi (CRS ignorato dal servizio?)')
+        errori.append(f'{fuori_crs[0]} feature illeggibili (CRS ignorato dal servizio? '
+                      'classe mancante?)')
     ok = risposte == 4 and not fuori_crs[0]
     if not ok:
         print('  ! PAI IdroGEO incompleto (' + '; '.join(errori[:2]) +
@@ -346,17 +358,15 @@ def _geom_4326(gj, to_xy):
     """
     if not gj:
         return None
-    try:
-        g = shape(gj)
-    except Exception:
-        return None
+    g = shape(gj)           # geometria malformata: alza, e pai() la conta come illeggibile
     polys = [g] if g.geom_type == 'Polygon' else list(getattr(g, 'geoms', []))
     out = []
     for q in polys:
         if q.geom_type != 'Polygon':
             continue
-        # il GeoJSON e' (lon, lat): latlon() lo riconosce e ALZA se sono metri
-        coords = [to_xy(*latlon(x, y)) for x, y in q.exterior.coords]
+        # il GeoJSON e' (lon, lat): latlon() lo riconosce e ALZA se sono metri.
+        # c[0], c[1] e non `for x, y in`: le coordinate possono avere la quota (x, y, z)
+        coords = [to_xy(*latlon(c[0], c[1])) for c in q.exterior.coords]
         try:
             r = Polygon(coords)
         except Exception:
@@ -417,8 +427,10 @@ def natura2000(parcels, to_xy):
             for ring in ft.get('geometry', {}).get('rings', []):
                 try:
                     # ArcGIS con outSR=4326 da' (lon, lat); se il servizio ignora outSR
-                    # risponde in metri e latlon() alza invece di proiettare a caso
-                    g = Polygon([to_xy(*latlon(v[0], v[1])) for v in ring])
+                    # risponde in metri e lonlat_gradi() alza invece di proiettare a
+                    # caso. I vertici oltre confine (siti transfrontalieri) sono gradi
+                    # validi e passano.
+                    g = Polygon([to_xy(*lonlat_gradi(v[0], v[1])) for v in ring])
                 except CoordinataNonValida:
                     fuori_crs += 1
                     continue

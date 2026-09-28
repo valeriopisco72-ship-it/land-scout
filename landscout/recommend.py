@@ -238,7 +238,7 @@ def main():
             print('ℹ nessun --comune/--prov: raccomando senza contesto code di connessione '
                   '(prima qui veniva applicato per sbaglio il nodo di Morcone)')
         d = json.load(open(A.scan, encoding='utf-8'))
-        recs = d.get('risultati', d if isinstance(d, list) else [])
+        recs = d.get('risultati', []) if isinstance(d, dict) else list(d or [])
         for r in recs:
             p = {'ha': r.get('ha', 0), 'slope': r.get('slope'),
                  'zps_pct': r.get('n2k_pct', 0), 'zps_border_m': r.get('n2k_border_m') or 9e9,

@@ -364,6 +364,64 @@ t('EEA controprova: anelli in gradi -> verificata, e la ZPS copre la particella'
   res is not None and res[2] is True and res[0] is not None
   and res[0].contains(Point(to_xy(LA, LO))), str(res), grave=True)
 
+print('\n[7] siti transfrontalieri e coordinate 3D (revisione del 28/09/2026)')
+
+# Un sito Natura 2000 a cavallo del confine ha vertici FUORI dal riquadro Italia ma
+# in gradi validi: non e' un CRS sbagliato. Scartarlo (o dichiarare non verificato
+# per sempre ogni particella di confine) e' sbagliato in entrambi i sensi.
+BLA, BLO = 45.80, 6.95          # Valle d'Aosta, vicino al confine francese
+bplist = [{'id': 'c', 'lat': BLA, 'lon': BLO, 'ha': 1.0}]
+EEA_CONFINE = json.dumps({'features': [{'attributes': {'SITECODE': 'IT0', 'SITETYPE': 'A'},
+                                        'geometry': {'rings': [[[6.30, BLA - 0.05],
+                                                                [BLO + 0.05, BLA - 0.05],
+                                                                [BLO + 0.05, BLA + 0.05],
+                                                                [6.30, BLA + 0.05],
+                                                                [6.30, BLA - 0.05]]]}}]})
+res, e, _ = con_get(lambda url, timeout=None: EEA_CONFINE, lambda: V.natura2000(bplist, to_xy))
+t('EEA: sito transfrontaliero (vertici oltre 6,5 E) -> verificato, e la ZPS c e',
+  res is not None and res[2] is True and res[0] is not None
+  and res[0].contains(Point(to_xy(BLA, BLO))), str(res and res[2]), grave=True)
+
+
+def get_confine(url, timeout=120):
+    return EEA_CONFINE if 'discomap' in url else VUOTA
+
+
+# lo scan con un solo layer che risponde in metri e gli altri validi: NON verificato
+def get_un_layer_metri(url, timeout=120):
+    if 'discomap' in url and '/1/query' in url:
+        return EEA_METRI
+    return VUOTA
+
+
+um, logum, e = esegui(prepara('unlayermetri'), get_un_layer_metri)
+t('scan: un layer EEA in metri basta a rendere Natura 2000 NON verificata',
+  e is None and bool(um) and all(r.get('n2k_incompleto') is True for r in um),
+  str(e or [r.get('n2k_incompleto') for r in um]), grave=True)
+
+# PAI con coordinate 3D (x, y, z): sono gradi validi, la frana va letta
+QUADRATO_3D = [[LO, LA, 350.0], [LO + 0.002, LA, 350.0], [LO + 0.002, LA + 0.002, 351.0],
+               [LO, LA + 0.002, 352.0], [LO, LA, 350.0]]
+V.reset_interruttore_pai()
+(fr, idr, ok), e, _ = con_get(
+    lambda url, timeout=None: fc(QUADRATO_3D, {'cod_per_it': 4}) if 'frane' in url else VUOTA_WFS,
+    lambda: V.pai([{'id': 'a', 'lat': LA, 'lon': LO, 'ha': 1.0}], to_xy))
+t('PAI 3D: la P4 viene letta', e is None and fr.get(4) is not None, str(e or fr), grave=True)
+t('PAI 3D: e il layer e verificato', e is None and ok is True, str(ok), grave=True)
+
+DUE = json.dumps({'type': 'FeatureCollection', 'numberMatched': 2, 'numberReturned': 2,
+                  'features': [{'type': 'Feature', 'properties': {'cod_per_it': 'x?'},
+                                'geometry': {'type': 'Polygon', 'coordinates': [QUADRATO_3D]}},
+                               {'type': 'Feature', 'properties': {'cod_per_it': 4},
+                                'geometry': {'type': 'Polygon', 'coordinates': [QUADRATO_3D]}}]})
+V.reset_interruttore_pai()
+(fr, idr, ok), e, _ = con_get(
+    lambda url, timeout=None: DUE if 'frane' in url else VUOTA_WFS,
+    lambda: V.pai([{'id': 'a', 'lat': LA, 'lon': LO, 'ha': 1.0}], to_xy))
+t('PAI: una classe illeggibile non fa saltare le feature successive',
+  e is None and fr.get(4) is not None, str(e or fr), grave=True)
+t('...ma rende il layer NON verificato', e is None and ok is False, str(ok), grave=True)
+
 print('\n' + '=' * 72)
 print(f'  RISULTATO: {OK}/{OK+FAIL} pass   ·   {FAIL} FAIL ({len(GRAVI)} gravi)')
 if GRAVI:

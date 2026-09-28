@@ -171,7 +171,10 @@ def descrivi(fb):
     if fb['robusto']:
         return (f"voto {fb['voto']:.1f} · robusto: tutte le fonti automatiche hanno risposto")
     prima = fb['lacune'][0]
-    nota = " (puo' bloccare)" if prima['puo_bloccare'] else ''
+    # forma completa (dict per lacuna) o compatta (solo chiavi, come nelle righe dello
+    # scan): le bloccanti stanno sempre davanti, quindi basta il conteggio
+    blocca = prima['puo_bloccare'] if isinstance(prima, dict) else fb.get('bloccanti_ignoti', 0) > 0
+    nota = " (puo' bloccare)" if blocca else ''
     return (f"voto {fb['voto']:.1f} [{fb['voto_peggiore']:.1f}–{fb['voto_migliore']:.1f}]"
             f" · verifica prima: {fb['verifica_prima']}{nota}")
 
@@ -213,16 +216,34 @@ def main(argv=None):
                     help='includi anche i controlli v0.2 mai eseguiti (EUAP, incendi, ...)')
     A = ap.parse_args(argv)
     d = json.load(open(A.scan, encoding='utf-8'))
-    righe = d.get('risultati', d if isinstance(d, list) else [])
-    tech = A.tech or d.get('tech') or 'agriPV'
-    out = []
+    # lo scan scrive {'tech', 'risultati': [...]}, ma una lista nuda di righe e' lecita
+    righe = d.get('risultati', []) if isinstance(d, dict) else list(d or [])
+    tech_scan = d.get('tech') if isinstance(d, dict) else None
+    tech = A.tech or tech_scan or 'agriPV'
+    out, ricalcolate = [], 0
     for r in righe:
-        fb = forbice(da_riga_scan(r), tech, completa=A.completa)
-        out.append((r, fb))
+        salvata = r.get('forbice')
+        if salvata and not A.completa and tech == (tech_scan or tech):
+            # la forbice calcolata DALLO SCAN, con tutti i campi (SITAP, fasce, penalita'
+            # OSM): ricalcolarla dalla riga, che non li porta tutti, darebbe numeri
+            # diversi da quelli del CSV e del GeoJSON (revisione del 28/09/2026)
+            out.append((r, salvata))
+            continue
+        p = da_riga_scan(r)
+        agg = 0.0
+        if r.get('score') is not None and tech == (tech_scan or tech):
+            # stesso voto della riga: la differenza e' cio' che la riga non porta
+            agg = r['score'] - score_parcel(dict(p), tech)[0]
+        out.append((r, forbice(p, tech, aggiustamento=agg, completa=A.completa)))
+        ricalcolate += 1
     out.sort(key=lambda x: (-x[1]['voto'], -x[1]['voto_peggiore']))
     fragili = sum(1 for _, fb in out[:A.top] if fb['bloccanti_ignoti'])
     print(f'FORBICE DI VERIFICA — {len(out)} particelle, tech {tech}')
-    print(f'  fra le prime {min(A.top, len(out))}: {fragili} con una lacuna che puo\' BLOCCARE\n')
+    print(f'  fra le prime {min(A.top, len(out))}: {fragili} con una lacuna che puo\' BLOCCARE')
+    if ricalcolate:
+        print(f'  ({ricalcolate} ricalcolate dalla riga — scan senza forbice, --completa o altra '
+              f'tecnologia: numeri indicativi, la riga non porta tutti i campi del motore)')
+    print()
     for r, fb in out[:A.top]:
         print(f"  {r.get('com', '')} Fg.{r.get('fg')} P.{r.get('pla'):<6} {descrivi(fb)}")
     return out
