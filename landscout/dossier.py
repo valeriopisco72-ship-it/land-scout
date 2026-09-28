@@ -84,10 +84,11 @@ def con_pendenza(parcels, _pendenza=None):
         return parcels, note
     try:
         if _pendenza is None:
-            # timeout corto: il dossier e' interattivo (pagina web), e con TINITALY
-            # appeso 5 campioni x 60 s a particella fermerebbero tutto per minuti
+            # il dossier e' interattivo (pagina web): timeout corto per richiesta E
+            # budget totale per fonte, altrimenti con TINITALY appeso 5 campioni in
+            # fila a particella fermerebbero tutto per minuti
             from landscout.prossimita import pendenza
-            r = pendenza(part, timeout=20)
+            r = pendenza(part, timeout=10, budget_s=45)
         else:
             r = _pendenza(part)
     except Exception as e:

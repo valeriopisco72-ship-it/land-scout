@@ -164,6 +164,38 @@ try:
 finally:
     urllib.request.urlopen, PR.time.sleep = _vq, _vs
 
+print('\n[6] un servizio appeso non ferma tutto: c e un budget di tempo TOTALE (28/09/2026)')
+
+# Il timeout e' per richiesta: 5 campioni a particella, in fila. Con TINITALY appeso
+# (risponde dopo il timeout, non rifiuta) dieci particelle costavano ~1.000 s prima
+# ancora di provare l'altra fonte — e il dossier e' una pagina web.
+orologio = {'t': 1000.0}
+chiamate_t = {'n': 0}
+
+
+def _tini_lento(la, lo, **k):
+    chiamate_t['n'] += 1
+    orologio['t'] += 6.0            # ogni richiesta "costa" 6 secondi
+    return 5.0
+
+
+_vt, _vtime = PR._tinitaly, PR.time.time
+try:
+    PR._tinitaly = _tini_lento
+    PR.time.time = lambda: orologio['t']
+    r8 = PR.pendenza_tinitaly([part(70, 1), part(70, 2), part(70, 3)], budget_s=10)
+    t('budget esaurito: le chiamate si fermano (non 15)', chiamate_t['n'] <= 3,
+      str(chiamate_t['n']), grave=True)
+    t('e le particelle non misurate restano NON verificate, non 0% ne mezze',
+      all(v['verificata'] is False for v in r8['particelle'].values()),
+      str(r8['particelle']), grave=True)
+    chiamate_t['n'] = 0
+    r9 = PR.pendenza_tinitaly([part(70, 1), part(70, 2), part(70, 3)])
+    t('controprova: senza budget si misura tutto', chiamate_t['n'] == 15 and
+      r9['n_verificate'] == 3, f"{chiamate_t['n']} {r9['n_verificate']}", grave=True)
+finally:
+    PR._tinitaly, PR.time.time = _vt, _vtime
+
 print('\n' + '=' * 72)
 print(f'  RISULTATO: {OK}/{OK+FAIL} pass   ·   {FAIL} FAIL ({len(GRAVI)} gravi)')
 if GRAVI:
