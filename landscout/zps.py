@@ -90,6 +90,14 @@ def studio(parcels, prov=None, comune=None, tech='agriPV', vinc=None):
     elif ignote and not in_zps:
         verdetto = 'NON VERIFICATO'
         sintesi = 'Le fonti Natura 2000 non hanno risposto: non si puo\' dire ne\' dentro ne\' fuori ZPS.'
+    elif in_zps and any(vinc[pid].get('habitat_ok') is False for pid in in_zps):
+        # ⚠ 28/09/2026: "0 ha su habitat vietato" valeva anche con la Carta Habitat
+        # giu' — il verdetto diceva "nessun divieto trovato" di un divieto mai cercato.
+        # Dentro la ZPS e' l'habitat a separare l'iter VInCA dal progetto vietato.
+        verdetto = 'VInCA NECESSARIA (habitat NON verificato)'
+        sintesi = (f'{ha_zps:.2f} ha in ZPS ({100*ha_zps/ha_tot:.1f}% del blocco); la Carta Habitat '
+                   'non ha risposto: il divieto su 6210/6220 (DGR 617/2024) NON e\' escluso finche\' '
+                   'non la si riconsulta.')
     elif in_zps:
         verdetto = 'VInCA NECESSARIA (nessun divieto trovato)'
         sintesi = (f'{ha_zps:.2f} ha in ZPS ({100*ha_zps/ha_tot:.1f}% del blocco) ma 0 ha su habitat vietato: '

@@ -180,6 +180,18 @@ def ammissibilita(parcels, vincoli, occupazione, soglie=None, tech='agriPV',
     # tacerlo, altrimenti un blocco costruito senza il PAI sembra un blocco senza
     # frane. E' la stessa regola di `arricchisci`, applicata alle fonti di monte.
     nv = []
+    # ⚠ 28/09/2026: qui c'erano solo PAI e SITAP. Natura 2000 e habitat — i due
+    # controlli che decidono il DIVIETO — passavano in silenzio: con la Carta
+    # Habitat giu' la particella entrava (giusto: non verificato non e' bocciato)
+    # e il riepilogo del blocco non ne faceva parola (sbagliato).
+    n_hab = sum(1 for a in ammesse if (vincoli.get(_id(a)) or {}).get('habitat_ok') is False)
+    if n_hab:
+        nv.append(f'{n_hab} particelle con habitat 6210/6220 NON verificato (fonte habitat '
+                  'non raggiunta): il divieto di modifica della destinazione d uso non e escluso')
+    n_n2k = sum(1 for a in ammesse if (vincoli.get(_id(a)) or {}).get('n2k_ok') is False)
+    if n_n2k:
+        nv.append(f'{n_n2k} particelle con Natura 2000 (ZPS/SIC) NON verificata (EEA non '
+                  'raggiunta): VINCA e divieti da ricontrollare')
     n_pai = sum(1 for a in ammesse if (vincoli.get(_id(a)) or {}).get('pai_ok') is False)
     if n_pai:
         nv.append(f'{n_pai} particelle con PAI frane/idraulica NON verificato '

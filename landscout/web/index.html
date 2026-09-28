@@ -344,8 +344,12 @@ function verdictState(verdetti, haBan){
   if(has(/usi civici|TITOLO/)) return {c:'blocco',ic:'!',t:'TITOLO — usi civici da affrancare',
     s:'Il titolo non è liberamente disponibile finché gli usi civici non sono affrancati: rischio per la vendita.'};
   // l'assenza di risposta e' ortogonale alla gravita': va PRIMA del "pulito", mai come "quasi pulito"
+  // un verdetto con riserva ('VINCA — NON VERIFICATO: habitat …') ha TROVATO qualcosa:
+  // non si puo' scrivere "nessun vincolo trovato", ne' "nessuna preclusione"
   if(has(/NON VERIFICAT/)) return {c:'ignoto',ic:'?',t:'NON VERIFICATO — non abbiamo potuto guardare',
-    s:'Nessun vincolo trovato, ma una fonte decisiva non ha risposto. Non è un via libera: è l\'assenza di una verifica. Riprova più tardi.'};
+    s:keys.some(k=>/^(VINCA|PAESAGGIO)/.test(k) && /NON VERIFICAT/.test(k))
+      ?'Dentro Natura 2000 o area paesaggistica (serve la VINCA), ma una fonte decisiva — habitat o PAI — non ha risposto: la preclusione non è esclusa. Riprova più tardi.'
+      :'Nessun vincolo trovato, ma una fonte decisiva non ha risposto. Non è un via libera: è l\'assenza di una verifica. Riprova più tardi.'};
   if(has(/VINCA|PAESAGGIO/)) return {c:'attenz',ic:'~',t:'VINCA — iter ordinario, nessuna preclusione',
     s:'Dentro Natura 2000 (ZPS/SIC) o area paesaggistica: serve Valutazione di Incidenza. Impegnativa, non preclusiva.'};
   if(has(/PARZIALE/)) return {c:'ok',ic:'✓',t:'PULITO — verifica parziale',
@@ -377,7 +381,10 @@ function render(d){
       manc.includes('usi_civici')?`<div class="v unk">non verificabili — SITAP non copre gli usi civici in ${esc(cov.regione||'')}</div>`
       :(!f.sitap_ok?'<div class="v unk">da verificare — SITAP non raggiunto</div>'
       :(f.usi_civici_n?`<div class="v"><b class="num">${f.usi_civici_n}</b> particelle da verificare</div>`:'<div class="v">✓ nessuno — titolo libero</div>'))}</div>
-    <div class="r"><div class="k">Fonte habitat</div><div class="v">${esc(cov.habitat_fonte||'—')}</div></div></div>`;
+    <div class="r"><div class="k">Fonte habitat</div>${f.habitat_ok===false
+      ?'<div class="v unk">non verificato — fonte habitat non raggiunta: il divieto 6210/6220 non è escluso</div>'
+      :`<div class="v">${esc(cov.habitat_fonte||'—')}</div>`}</div>
+    ${f.n2k_ok===false?'<div class="r"><div class="k">Natura 2000</div><div class="v unk">non verificato — EEA non raggiunta</div></div>':''}</div>`;
   if(!cov.habitat_regionale) b+=`<div class="warn">Carta habitat regionale assente per ${esc(cov.regione||'questa regione')}:
     dato ISPRA 1:50.000 + corrispondenza ufficiale CORINE→Direttiva Habitat — <b>fondato ma indicativo</b>, conferma sulla cartografia regionale.</div>`;
   if(manc.length) b+=`<div class="warn unk">Controlli non disponibili in ${esc(cov.regione||'')}: <b>${manc.map(esc).join(', ')}</b>. Qui il tool non può dire "pulito" su questi layer.</div>`;

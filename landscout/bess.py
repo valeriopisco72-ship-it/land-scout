@@ -560,7 +560,11 @@ def vincoli_bess(p):
     # I vincoli che il fotovoltaico teme e l'accumulo no: vanno detti, perche'
     # sono la ragione strategica per cui questo sito puo' valere per il BESS.
     favorevoli = []
-    if p.get('zps_pct', 0) > 10:
+    zpct = p.get('zps_pct', 0)
+    if zpct is None:
+        # EEA non raggiunta: ne' "dentro" (favorevole relativo) ne' "fuori"
+        flag.append('Natura 2000 (ZPS/SIC) NON verificato: la VINCA potrebbe servire')
+    elif zpct > 10:
         favorevoli.append('dentro ZPS: la VINCA resta obbligatoria, ma il regime "aree non '
                           'idonee" del D.Lgs 199/2021 riguarda gli impianti FER — un accumulo '
                           'non produce energia. Da far confermare, e\' il punto piu' + ' delicato.')

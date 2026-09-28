@@ -146,8 +146,12 @@ def cached_file(url, nome, ttl_giorni=None, forza=False):
     Non solleva: il chiamante decide come degradare."""
     dest = Path(CACHE_DIR) / nome
     ttl = (ttl_giorni if ttl_giorni is not None else 180) * _DAY
+    # ⚠ 28/09/2026: era `if not ttl or ...` — lo zero-falsy che JsonCache aveva gia'
+    # corretto il 16/07: ttl_giorni=0 voleva dire "sempre scaduto" e produceva
+    # "mai scaduto". Qui ttl<=0 riscarica sempre (e se la rete manca, sotto, si
+    # ripiega comunque sulla copia vecchia).
     if dest.exists() and not forza:
-        if not ttl or (time.time() - dest.stat().st_mtime) < ttl:
+        if ttl > 0 and (time.time() - dest.stat().st_mtime) < ttl:
             return dest
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)

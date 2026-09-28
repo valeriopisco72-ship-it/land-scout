@@ -86,14 +86,26 @@ def p_auth(vincoli):
         return 0.0, ('divieto di modifica della destinazione d\'uso su habitat 6210/6220 '
                      '(DGR Campania 617/2024): non esiste il progetto solare, e nemmeno '
                      'quello di accumulo')
+    # ⚠ 28/09/2026: una chiave PRESENTE e None e' "fonte non raggiunta". Prima
+    # cadeva nell'ultimo ramo e usciva 0,75 "fuori Natura 2000: iter ordinario
+    # senza VINCA" — la probabilita' piu' alta, con la motivazione di un
+    # controllo mai eseguito. La chiave ASSENTE resta come prima (API storica).
+    riserva = ''
+    if 'habitat_ban' in vincoli and vincoli['habitat_ban'] is None:
+        riserva = (' — ⚠ habitat NON verificato: se il terreno fosse su 6210/6220 '
+                   'la probabilita\' sarebbe zero')
     if vincoli.get('usi_civici'):
-        return 0.15, 'usi civici: il titolo non e\' liberamente disponibile finche\' non e\' affrancato'
+        return 0.15, ('usi civici: il titolo non e\' liberamente disponibile finche\' non '
+                      'e\' affrancato' + riserva)
     if vincoli.get('sic'):
-        return 0.35, 'dentro SIC/ZSC: incidenza diretta su habitat e specie Direttiva Habitat'
+        return 0.35, 'dentro SIC/ZSC: incidenza diretta su habitat e specie Direttiva Habitat' + riserva
     if vincoli.get('zps'):
         return 0.50, ('dentro ZPS: nessuna preclusione automatica ma iter ordinario con VINCA '
-                      '(banda 0,4–0,6 — il valore vero dipende dallo studio di sito)')
-    return 0.75, 'fuori Natura 2000: iter ordinario senza VINCA'
+                      '(banda 0,4–0,6 — il valore vero dipende dallo studio di sito)' + riserva)
+    if 'zps' in vincoli and vincoli['zps'] is None:
+        return 0.75, ('MASSIMO teorico: Natura 2000 NON verificato (EEA non raggiunta) — il 75% '
+                      'vale solo se il terreno risultasse fuori ZPS/SIC' + riserva)
+    return 0.75, 'fuori Natura 2000: iter ordinario senza VINCA' + riserva
 
 
 def _banda(lo, hi, q):
@@ -153,6 +165,13 @@ def valore(tot_ha, vincoli=None, tech='agriPV', copertura=None, prov=None):
     p, perche_p = p_auth(vincoli)
     out = {'tot_ha': round(tot_ha, 2), 'tech': tech, 'p_auth': p, 'p_auth_perche': perche_p,
            'gradini': [], 'avvisi': [], 'confidenza': 'bassa'}
+    ignoti = [nome for k, nome in (('zps', 'Natura 2000'), ('habitat_ban', 'habitat 6210/6220'))
+              if k in vincoli and vincoli[k] is None]
+    if ignoti:
+        out['avvisi'].append(
+            f'{" e ".join(ignoti)} NON verificat{"i" if len(ignoti) > 1 else "o"} (fonte non '
+            'raggiunta): la probabilita\' autorizzativa e il valore ponderato sono un MASSIMO, '
+            'non una stima.')
 
     # --- 1. agricolo: sempre presente, e' il pavimento
     g_agr = _gradino_agricolo(tot_ha, prov)
@@ -219,7 +238,8 @@ def valore(tot_ha, vincoli=None, tech='agriPV', copertura=None, prov=None):
             'Senza permessi il progetto vale una frazione di quel numero.')
 
     out['confidenza'] = ('media' if (cov.get('habitat_regionale') and cov.get('sitap')
-                                     and out.get('base_agricola') == 'vam') else 'bassa')
+                                     and out.get('base_agricola') == 'vam' and not ignoti)
+                         else 'bassa')
     out['sintesi'] = (
         f'Pavimento agricolo {out["gradini"][0]["range_eur"][0]:,}–{out["gradini"][0]["range_eur"][1]:,} €; '
         f'con opzionalita\' {out["gradini"][1]["range_eur"][0]:,}–{out["gradini"][1]["range_eur"][1]:,} €. '

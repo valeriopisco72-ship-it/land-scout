@@ -55,8 +55,12 @@ def _normalizza(p):
     q = dict(p or {})
     q['ha'] = _num(q.get('ha'), 0.0)
     q['slope'] = _num(q.get('slope'), None) if q.get('slope') is not None else None
-    q['zps_pct'] = _num(q.get('zps_pct'), 0.0)
-    q['zps_border_m'] = _num(q.get('zps_border_m'), 9e9)
+    # ⚠ 28/09/2026: la ZPS e' un VINCOLO, non una distanza, eppure qui "non so"
+    # diventava 0.0 = "verificato fuori ZPS" — e l'eolico usciva "fuori ZPS:
+    # possibile" su un terreno di cui l'EEA non aveva detto nulla. Resta None.
+    q['zps_pct'] = _num(q.get('zps_pct'), None)
+    q['zps_border_m'] = (_num(q.get('zps_border_m'), 9e9)
+                         if q['zps_pct'] is not None else None)
     q['d_se_m'] = _num(q.get('d_se_m'), 9e9)
     q['d_150kv_m'] = _num(q.get('d_150kv_m'), 9e9)
     # ⚠️ 12/08/2026: qui `bool(...)` ANNULLAVA la correzione del 16/07 scritta tre
@@ -82,7 +86,8 @@ def recommend(p, node=None):
         return {'top': None, 'opzioni': [],
                 'errore': 'superficie mancante o non valida: senza ettari non si puo\' '
                           'raccomandare una tecnologia'}
-    zps = p.get('zps_pct', 0) > 10
+    zps_ignota = p.get('zps_pct') is None
+    zps = not zps_ignota and p['zps_pct'] > 10
     # ⚠ QA 16/07: `bool(...)` trasformava None ("non verificato") in False ("nessun divieto")
     # = stesso schema del falso-pulito. Ora i tre stati restano tre: True / False / None.
     hab_ban = p.get('habitat_ban')
@@ -147,6 +152,11 @@ def recommend(p, node=None):
     if zps:
         R.append({'tech': 'eolico', 'score': None, 'verdetto': 'ESCLUSO',
                   'reasons': ['eolico vietato in ZPS (DM 17/10/2007)']})
+    elif zps_ignota:
+        R.append({'tech': 'eolico', 'score': None, 'verdetto': 'da valutare',
+                  'reasons': ['⚠ Natura 2000 NON verificato: se il terreno fosse in ZPS '
+                              'l\'eolico sarebbe vietato (DM 17/10/2007) — prima di tutto '
+                              'va controllato il confine ZPS']})
     else:
         R.append({'tech': 'eolico', 'score': None, 'verdetto': 'da valutare',
                   'reasons': ['fuori ZPS: possibile ma richiede atlante vento + scala + distanza abitazioni (non valutato dal tool)']})

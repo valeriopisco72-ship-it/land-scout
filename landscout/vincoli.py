@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # niente path 
 from landscout.engine import m_per_deg
 from landscout.config import (EP, UA, TIMEOUT, SITAP_LAYERS, BAN_CODES, HABITAT_ZIP,
                               HABITAT_PREFIX, copertura, sitap_layers, CHIAVI_SITAP,
-                              CORINE_BAN, latlon)
+                              CORINE_BAN, latlon, CoordinataNonValida)
 from landscout.cache import cached_file
 from shapely.geometry import Polygon, MultiPolygon, LineString, Point, GeometryCollection, shape
 from shapely.ops import unary_union
@@ -134,7 +134,7 @@ def sitap_paesaggio(parcels, to_xy, regione=None):
             # None = NON verificato. Include ora anche i semi-guasti (200+errore) e i
             # troncamenti (count=400 con numberMatched piu' alto): prima passavano per "pulito".
             out[name] = None; ok = False; print(f'  ! SITAP {name}: {e}'); continue
-        geoms = []
+        geoms, illeggibili = [], 0
         for ft in feats:
             g = ft.get('geometry') or {}
             t = g.get('type', '')
@@ -145,15 +145,25 @@ def sitap_paesaggio(parcels, to_xy, regione=None):
                     ls = shape({'type': t, 'coordinates': _proj_coords(g['coordinates'], to_xy, t)})
                     geoms.append(ls.buffer(28.0))    # tratturo ~55 m -> semilarghezza 28 m
             except Exception:
-                pass
+                illeggibili += 1
+        if illeggibili:
+            # ⚠ 28/09/2026: prima `except: pass` — la feature spariva e il layer restava
+            # "verificato". Un vincolo che non si riesce a disegnare non e' un vincolo
+            # assente: il layer torna NON verificato.
+            out[name] = None; ok = False
+            print(f'  ! SITAP {name}: {illeggibili} geometrie illeggibili (CRS?) -> NON verificato')
+            continue
         out[name] = unary_union(geoms) if geoms else GeometryCollection()   # vuoto = verificato PULITO
     return out, ok
 
 def _proj_coords(coords, to_xy, gtype):
+    # ⚠ 28/09/2026: l'ordine si riconosceva con una finestra sulla CAMPANIA
+    # (40-43 N, 13-16 E): fuori da li' una risposta (lat, lon) veniva girata al
+    # contrario e il vincolo finiva lontano dalla particella — "pulito". SITAP copre
+    # nove regioni. latlon() usa il riquadro dell'Italia intera e ALZA se la coppia
+    # non e' in gradi: il chiamante la conta come geometria illeggibile.
     def pt(c):
-        a, b = c[0], c[1]
-        lat, lon = (a, b) if (40 <= a <= 43 and 13 <= b <= 16) else (b, a)
-        return list(to_xy(lat, lon))
+        return list(to_xy(*latlon(c[0], c[1])))
     if gtype in ('Polygon', 'MultiLineString'):
         return [[pt(c) for c in ring] for ring in coords]
     if gtype == 'MultiPolygon':
@@ -244,6 +254,14 @@ def pai(parcels, to_xy, margine=0.01):
 
     frane, idro = {}, {}
     risposte, errori = 0, []
+    fuori_crs = [0]         # feature scartate perche' non in gradi: vedi _geom_4326
+
+    def geom(ft):
+        try:
+            return _geom_4326(ft.get('geometry'), to_xy)
+        except CoordinataNonValida:
+            fuori_crs[0] += 1
+            return None
     global _IDROGEO_GIU
     if _IDROGEO_GIU:
         motivo, quando = _IDROGEO_GIU
@@ -260,7 +278,7 @@ def pai(parcels, to_xy, margine=0.01):
         risposte += 1
         for ft in d.get('features', []):
             c = (ft.get('properties') or {}).get('cod_per_it')
-            g = _geom_4326(ft.get('geometry'), to_xy)
+            g = geom(ft)
             if g is not None and c is not None:
                 frane.setdefault(int(c), []).append(g)
     except Exception as e:
@@ -275,7 +293,7 @@ def pai(parcels, to_xy, margine=0.01):
             d = scarica('idrogeo:pericolosita_idraulica_' + lay)
             risposte += 1
             for ft in d.get('features', []):
-                g = _geom_4326(ft.get('geometry'), to_xy)
+                g = geom(ft)
                 if g is not None:
                     idro.setdefault(lvl, []).append(g)
         except Exception as e:
@@ -284,7 +302,11 @@ def pai(parcels, to_xy, margine=0.01):
     # Basta che UNO dei quattro layer non risponda perche' il quadro sia parziale:
     # la classe mancante potrebbe essere proprio quella che blocca. Meglio dichiarare
     # "non verificato" che dire "nessuna frana" avendo letto tre layer su quattro.
-    ok = risposte == 4
+    # E una feature che non si e' potuta collocare vale quanto un layer muto: il
+    # poligono scartato potrebbe essere proprio la P4 sotto la particella.
+    if fuori_crs[0]:
+        errori.append(f'{fuori_crs[0]} poligoni non in gradi (CRS ignorato dal servizio?)')
+    ok = risposte == 4 and not fuori_crs[0]
     if not ok:
         print('  ! PAI IdroGEO incompleto (' + '; '.join(errori[:2]) +
               ') -> frane/idraulica NON verificate: il verdetto lo dichiarera\'')
@@ -313,10 +335,14 @@ def _unione(geoms):
 
 
 def _geom_4326(gj, to_xy):
-    """GeoJSON in gradi -> poligono nel piano metrico locale. None se non e' lat/lon.
+    """GeoJSON in gradi -> poligono nel piano metrico locale. None se vuoto/illeggibile.
 
-    Se il servizio ha risposto in coordinate proiettate, `valida_coordinate` alza e
-    qui si scarta la feature invece di piazzarla dall'altra parte del mondo.
+    Se il servizio ha risposto in coordinate proiettate, `latlon` alza
+    CoordinataNonValida e l'eccezione ESCE: il chiamante scarta la feature invece
+    di piazzarla dall'altra parte del mondo, ma deve anche SAPERLO. ⚠ 28/09/2026:
+    prima qui si tornava None e la feature spariva in silenzio — con un IdroGEO
+    che ignora srsName, tutte le frane venivano scartate e il layer risultava
+    "verificato, nessuna frana".
     """
     if not gj:
         return None
@@ -329,9 +355,10 @@ def _geom_4326(gj, to_xy):
     for q in polys:
         if q.geom_type != 'Polygon':
             continue
+        # il GeoJSON e' (lon, lat): latlon() lo riconosce e ALZA se sono metri
+        coords = [to_xy(*latlon(x, y)) for x, y in q.exterior.coords]
         try:
-            # il GeoJSON e' (lon, lat): latlon() lo riconosce e ALZA se sono metri
-            r = Polygon([to_xy(*latlon(x, y)) for x, y in q.exterior.coords])
+            r = Polygon(coords)
         except Exception:
             return None
         # I poligoni della mosaicatura PAI arrivano spesso auto-intersecanti (sono
@@ -371,7 +398,7 @@ def natura2000(parcels, to_xy):
     env = {'xmin': bmin_lon, 'ymin': bmin_lat, 'xmax': bmax_lon, 'ymax': bmax_lat,
            'spatialReference': {'wkid': 4326}}
     zps, sic = [], []
-    risposte, errori = 0, []
+    risposte, errori, fuori_crs = 0, [], 0
     for lyr in (0, 1, 2, 3):
         p = {'geometry': json.dumps(env), 'geometryType': 'esriGeometryEnvelope', 'inSR': 4326,
              'outSR': 4326, 'outFields': 'SITECODE,SITETYPE', 'returnGeometry': 'true',
@@ -389,13 +416,21 @@ def natura2000(parcels, to_xy):
             st = (ft.get('attributes') or {}).get('SITETYPE', '')
             for ring in ft.get('geometry', {}).get('rings', []):
                 try:
-                    g = Polygon([to_xy(v[1], v[0]) for v in ring])
+                    # ArcGIS con outSR=4326 da' (lon, lat); se il servizio ignora outSR
+                    # risponde in metri e latlon() alza invece di proiettare a caso
+                    g = Polygon([to_xy(*latlon(v[0], v[1])) for v in ring])
+                except CoordinataNonValida:
+                    fuori_crs += 1
+                    continue
                 except Exception:
                     continue
                 if st in ('A', 'C'): zps.append(g)
                 if st in ('B', 'C'): sic.append(g)
     # nessun layer ha risposto -> non sappiamo nulla. NON e' "non c'e' nulla".
-    ok = risposte > 0
+    # E un anello che non si e' potuto collocare potrebbe essere proprio la ZPS.
+    if fuori_crs:
+        errori.insert(0, f'{fuori_crs} anelli non in gradi (outSR ignorato?)')
+    ok = risposte > 0 and not fuori_crs
     if not ok:
         print('  ! EEA Natura 2000 IRRAGGIUNGIBILE (' + '; '.join(errori[:2]) +
               ') -> ZPS/SIC NON verificati: il verdetto lo dichiarera\'')
@@ -472,7 +507,7 @@ def habitat_ispra(parcels):
         print('  ! ISPRA habitat non raggiungibile:', str(e)[:70], '-> habitat NON verificato')
         return None
     ident = lambda lat, lon: (lon, lat)
-    geoms = []
+    geoms, illeggibili = [], 0
     for f in data.get('features', []):
         g = f.get('geometry') or {}
         t = g.get('type', '')
@@ -482,7 +517,11 @@ def habitat_ispra(parcels):
             geoms.append(((f.get('properties') or {}).get('codice_corine'),
                           shape({'type': t, 'coordinates': _proj_coords(g['coordinates'], ident, t)})))
         except Exception:
-            pass
+            illeggibili += 1
+    if illeggibili:
+        # un poligono CORINE scartato in silenzio poteva essere proprio il 34.5 (-> 6220)
+        print(f'  ! ISPRA habitat: {illeggibili} geometrie illeggibili (CRS?) -> habitat NON verificato')
+        return None
     # geoms sono in gradi (lon, lat). Va bene per una FRAZIONE: intersezione/totale hanno lo
     # stesso fattore di scala, che quindi si semplifica. (Non andrebbe bene per un'area assoluta.)
     res = {}
@@ -699,6 +738,25 @@ def feasibility(parcels, prov=None):
         # I vincoli TROVATI vincono sempre (un divieto e' un divieto anche se il resto e'
         # incerto); solo DOPO, se non c'e' nessun vincolo, ci si chiede se avevamo davvero
         # gli occhi aperti. L'ordine conta: prima si guarda cosa si e' visto, poi cosa no.
+        # cosa non abbiamo potuto guardare: serve al CLEAN (che senza queste fonti non
+        # si puo' scrivere) e ai verdetti NON bloccanti. ⚠ 28/09/2026: 'VINCA' veniva
+        # scritto anche con la Carta Habitat giu', e la pagina web lo traduce in
+        # "nessuna preclusione" — ma dentro la ZPS e' proprio l'habitat 6210/6220 a
+        # separare "iter VINCA" da "progetto vietato". Un vincolo trovato non
+        # autorizza a tacere su quelli che potrebbero essere peggiori.
+        ciechi = []
+        if not n2k_ok:
+            ciechi.append('Natura 2000 (EEA non raggiunta)')
+        if not pai_ok:
+            ciechi.append('PAI frane/idraulica (IdroGEO non raggiunto)')
+        if r['habitat_ok'] is False:
+            ciechi.append('habitat (fonte non raggiunta)')
+        # SITAP assente per REGIONE e' strutturale (lo dice gia' la copertura);
+        # SITAP che non risponde e' un guasto di questa esecuzione
+        sitap_cieco = (f"SITAP assente per {cov['regione'] or 'questa regione'}"
+                       if not cov['sitap'] else ('SITAP non raggiunto' if not sitap_ok else None))
+        lacune = ciechi + ([sitap_cieco] if (sitap_cieco and cov['sitap']) else [])
+        riserva = (' — NON VERIFICATO: ' + ' + '.join(lacune)) if lacune else ''
         if r['habitat_ban'] is True:
             v = 'BLOCK_HABITAT'
         elif r['pai_blocker'] is True:
@@ -709,24 +767,15 @@ def feasibility(parcels, prov=None):
                 det.append(f"idraulica P{r['pai_idr']} {max(r['pai_idraulica_pct'].values()):.0f}%")
             v = 'BLOCK_PAI(' + ', '.join(det) + ')'
         elif r['usi_civici'] is True:
-            v = 'TITOLO(usi civici)'
+            v = 'TITOLO(usi civici)' + riserva
         elif r['zps'] or r['sic']:
-            v = 'VINCA' + ('+SIC' if r['sic'] else '')
+            v = 'VINCA' + ('+SIC' if r['sic'] else '') + riserva
         elif any(r.get(k) for k in ('lago_300m', 'fiume_150m', 'bosco_142g', 'tratturo', 'archeo_area', 'art136')):
-            v = 'PAESAGGIO'
+            v = 'PAESAGGIO' + riserva
         else:
             # nessun vincolo trovato: ma li abbiamo cercati tutti davvero?
-            ciechi = []
-            if not n2k_ok:
-                ciechi.append('Natura 2000 (EEA non raggiunta)')
-            if not pai_ok:
-                ciechi.append('PAI frane/idraulica (IdroGEO non raggiunto)')
-            if r['habitat_ok'] is False:
-                ciechi.append('habitat (fonte non raggiunta)')
-            if not cov['sitap']:
-                ciechi.append(f"SITAP assente per {cov['regione'] or 'questa regione'}")
-            elif not sitap_ok:
-                ciechi.append('SITAP non raggiunto')
+            if sitap_cieco:
+                ciechi.append(sitap_cieco)
             if ciechi:
                 # MAI 'CLEAN' qui: senza queste fonti non sappiamo nulla di decisivo.
                 v = 'NON VERIFICATO: ' + ' + '.join(ciechi)
@@ -771,6 +820,13 @@ def to_score_fields(vinc):
     # se il modulo ha rilevato la ZPS e il chiamante non la calcola gia', la fornisco
     if vinc.get('zps') and 'zps_pct' not in f:
         f['zps_pct'] = 100.0; f['zps_border_m'] = -1
+    # ⚠ 28/09/2026: EEA non raggiunta -> `zps` None. Prima qui non si scriveva nulla
+    # e `score_with_vincoli` riempiva il buco con il suo default `zps_pct=0.0`,
+    # cioe' "verificato fuori ZPS": il verdetto diceva NON VERIFICATO e il voto
+    # della stessa particella era quello di un terreno pulito. None passa com'e':
+    # engine.score_parcel ora lo sa leggere.
+    elif vinc.get('zps') is None and (vinc.get('n2k_ok') is False or 'zps' in vinc):
+        f['zps_pct'] = None; f['zps_border_m'] = None
     return f
 
 
@@ -790,9 +846,17 @@ def score_with_vincoli(parcels, tech='agriPV'):
     return out
 
 
+def _rango_verdetto(v):
+    """Gravita' per l'ordinamento, per PREFISSO: i verdetti portano dettagli e riserve
+    ('BLOCK_PAI(frana P4 …)', 'VINCA — NON VERIFICATO: …') che un confronto esatto
+    manderebbe in fondo, dopo i CLEAN."""
+    order = (('BLOCK_HABITAT', 0), ('BLOCK_PAI', 1), ('TITOLO', 2), ('VINCA+SIC', 3),
+             ('VINCA', 4), ('PAESAGGIO', 5), ('NON VERIFICATO', 6), ('CLEAN', 7))
+    return next((r for k, r in order if str(v).startswith(k)), 9)
+
+
 def print_report(res):
-    order = {'BLOCK_HABITAT': 0, 'TITOLO(usi civici)': 1, 'VINCA+SIC': 2, 'VINCA': 3, 'PAESAGGIO': 4, 'CLEAN': 5}
-    rows = sorted(res.items(), key=lambda kv: (order.get(kv[1]['verdetto'], 9), kv[0]))
+    rows = sorted(res.items(), key=lambda kv: (_rango_verdetto(kv[1]['verdetto']), kv[0]))
     print('\n' + '='*90)
     print('  VINCOLI / FATTIBILITA\' per particella')
     print('='*90)

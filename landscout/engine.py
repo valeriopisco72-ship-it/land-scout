@@ -17,6 +17,23 @@ def m_per_deg(lat):
     return 111132.0, 111320.0 * math.cos(math.radians(lat))
 
 
+# Oltre questa soglia una distanza non e' una misura: e' la sentinella 9e9 che
+# scan/recommend usano per "nessun elemento trovato". Stessa soglia di
+# costo_connessione_eur() e dello scan (`0 < zbd < 9e8`).
+SENTINELLA_M = 9e8
+
+
+def _distanza(d):
+    """Distanza in metri, oppure None se ignota (assente, None, sentinella 9e9)."""
+    if d is None:
+        return None
+    try:
+        d = float(d)
+    except (TypeError, ValueError):
+        return None
+    return None if (d != d or d >= SENTINELLA_M) else d
+
+
 def score_parcel(p, tech='BESS'):
     """p: dict con ha, slope, zps_pct, zps_border_m (>0 fuori), pai_fr (max cod), pai_idr (0/1/2/3),
     d_se_m, d_150kv_m, fascia_lago (bool), fascia_fiume (bool), note_occupazione (str|None).
@@ -26,20 +43,35 @@ def score_parcel(p, tech='BESS'):
     blocker = False
 
     # --- ZPS / Natura 2000 ---
-    if p['zps_pct'] > 10:
+    # `zps_pct` assente o None = EEA non raggiunta o mai interrogata. Fino al
+    # 28/09/2026 qui c'era `p['zps_pct'] > 10`: KeyError sul dict costruito a mano,
+    # TypeError sul None — e per non farlo esplodere ogni chiamante riempiva il
+    # buco con 0.0, cioe' "verificato fuori ZPS". Stessa regola del PAI: un dato
+    # che non arriva si dichiara, non si trasforma in una buona notizia.
+    zpct, zbd = p.get('zps_pct'), p.get('zps_border_m')
+    if zpct is None:
+        flags.append('⚠ Natura 2000 (ZPS/SIC) NON verificato: confini da controllare '
+                     '(non assumere "fuori ZPS")')
+    elif zpct > 10:
         if tech == 'BESS':
             s -= 30; flags.append('DENTRO ZPS: VINCA obbligatoria (warning forte)')
-        elif 'habitat_ban' in p and not p['habitat_ban']:
+        elif p.get('habitat_ban') is False:
             # Fase 7: ZPS ma verificato NON su habitat 6220/6210 → VINCA avifauna gestibile,
             # non preclusione (cfr. studio Morcone: habitat sgombro + precedente VINCA RWE).
+            # ⚠ 28/09/2026: `is False`, non `not`: con la Carta Habitat giu' (None) questo
+            # ramo scattava lo stesso — "NON su habitat vietato" scritto su un controllo
+            # mai eseguito, e il blocker spento (voto 7,9 classe B invece di D).
             s -= 28; flags.append('DENTRO ZPS ma NON su habitat vietato (6220/6210): iter VINCA avifauna — impegnativo ma non preclusivo')
         else:
             blocker = True; flags.append('DENTRO ZPS: non idoneo solare/agriPV senza VINCA robusta')
-    elif 0 < p['zps_border_m'] <= 500:
+            if 'habitat_ban' in p and p['habitat_ban'] is None:
+                flags.append('⚠ habitat 6210/6220 NON verificato (fonte non raggiunta): solo con '
+                             'l habitat verificato sgombro la ZPS diventa un iter VINCA')
+    elif zbd is not None and 0 < zbd <= 500:
         if tech == 'BESS':
-            s -= 3; flags.append(f'buffer ZPS ({p["zps_border_m"]:.0f} m): solo screening VINCA, non blocca BESS')
+            s -= 3; flags.append(f'buffer ZPS ({zbd:.0f} m): solo screening VINCA, non blocca BESS')
         else:
-            s -= 20; flags.append(f'buffer ZPS ({p["zps_border_m"]:.0f} m): warning solare')
+            s -= 20; flags.append(f'buffer ZPS ({zbd:.0f} m): warning solare')
 
     # --- vincoli ufficiali (Fase 7, landscout/vincoli.py) ---
     # habitat 6220/6210: il divieto NON riguarda solo il fotovoltaico e NON
@@ -191,13 +223,19 @@ def score_parcel(p, tech='BESS'):
             s -= 6; flags.append(f'esposizione Nord ({asp:.0f}°): resa inferiore e layout penalizzato')
 
     # --- rete (bonus continui: la distanza pesa in modo graduale) ---
-    dse = p.get('d_se_m', 9e9)
-    if dse <= 3000:
+    # 9e9 e' la sentinella storica di "nessuna SE trovata" (Overpass giu' o
+    # finestra di ricerca vuota): pesa come una SE lontana, ma NON si stampa come
+    # "SE a 9000000.0 km", che e' un numero inventato con l'aria di una misura.
+    dse = _distanza(p.get('d_se_m'))
+    if dse is None:
+        s -= 12; flags.append('SE non individuata: distanza dalla rete NON verificata '
+                              '(connessione da approfondire)')
+    elif dse <= 3000:
         s += 12 * (1 - dse / 3000)
     else:
         s -= 12; flags.append(f'SE a {dse/1000:.1f} km: connessione da approfondire')
-    dkv = p.get('d_150kv_m', 9e9)
-    if dkv <= 1000:
+    dkv = _distanza(p.get('d_150kv_m'))
+    if dkv is not None and dkv <= 1000:
         s += 3 * (1 - dkv / 1000)
 
     # --- taglia (continuo tra 1 e 2,5 ha) ---
@@ -261,7 +299,8 @@ def costo_connessione_eur(d_se_m):
     100-150 k€/km (scavo + posa, MT/AT). E' il vero discrimine economico: oltre ~5 km
     il costo di connessione si mangia il margine, per quanto il terreno sia buono.
     """
-    if d_se_m is None or d_se_m >= 9e8:
+    d_se_m = _distanza(d_se_m)
+    if d_se_m is None:
         return None
     km = d_se_m / 1000.0
     lo, hi = 100_000, 150_000
@@ -293,8 +332,10 @@ def price_parcel(p, score, classe, tech='BESS'):
     base = BASE_EUR_HA[tech]
     # moltiplicatore qualita': classe A=1.0, B=0.85, C=0.65
     mq = {'A': 1.0, 'B': 0.85, 'C': 0.65}[classe]
-    # rete: oltre 2 km la negoziabilita' scende
-    mr = 1.0 if p.get('d_se_m', 9e9) < 1000 else (0.92 if p['d_se_m'] < 2000 else 0.85)
+    # rete: oltre 2 km la negoziabilita' scende. Distanza ignota = la fascia peggiore
+    # (prima: KeyError su `p['d_se_m']` quando la chiave mancava).
+    dse = _distanza(p.get('d_se_m'))
+    mr = 0.85 if dse is None else (1.0 if dse < 1000 else (0.92 if dse < 2000 else 0.85))
     m = mq * mr
     out = {'applicabile': True,
            'eur_ha': {k: round(v * m / 500) * 500 for k, v in base.items()},
