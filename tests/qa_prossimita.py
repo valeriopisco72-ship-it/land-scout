@@ -78,6 +78,8 @@ finally:
 
 print('\n[3] il nodata del raster non passa per un valore')
 
+import json
+import urllib.parse
 import urllib.request
 
 
@@ -120,6 +122,47 @@ try:
       'TINITALY' not in r5['dataset'], r5['dataset'], grave=True)
 finally:
     PR._tinitaly, urllib.request.urlopen = _vt, _vq
+
+print('\n[5] un DEM che risponde a meta non e una pendenza misurata (28/09/2026)')
+
+# Le quote si chiedono a blocchi di `punti_max` punti: una particella puo' stare a
+# cavallo di due blocchi. Se il secondo fallisce le restano i punti del primo — magari
+# tutti dal lato piano — e la pendenza calcolata su quelli usciva "verificata", con il
+# dislivello sottostimato: un fondo al 20% poteva risultare al 3%.
+chiamate = {'n': 0}
+
+
+def _dem_a_meta(req, *a, **k):
+    chiamate['n'] += 1
+    url = req.full_url if hasattr(req, 'full_url') else str(req)
+    n = urllib.parse.unquote(url.split('locations=')[1]).count('|') + 1
+    if chiamate['n'] == 2:
+        raise OSError('opentopodata: 429 Too Many Requests')
+    return _Risposta(json.dumps({'results': [{'elevation': 400.0 + i} for i in range(n)]}))
+
+
+def _dem_tutto(req, *a, **k):
+    url = req.full_url if hasattr(req, 'full_url') else str(req)
+    n = urllib.parse.unquote(url.split('locations=')[1]).count('|') + 1
+    return _Risposta(json.dumps({'results': [{'elevation': 400.0 + i} for i in range(n)]}))
+
+
+_vq, _vs = urllib.request.urlopen, PR.time.sleep
+try:
+    PR.time.sleep = lambda *_a, **_k: None
+    urllib.request.urlopen = _dem_a_meta
+    # part() ha 4 vertici + il centroide = 5 punti: con punti_max=4 la prima
+    # particella sta per 4/5 nel primo blocco e per 1/5 nel secondo
+    r6 = PR.pendenza([part(70, 1), part(70, 2)], fonte='opentopo', punti_max=4)
+    v6 = r6['particelle']['70_1']
+    t('particella a cavallo del blocco fallito: NON verificata',
+      v6['verificata'] is False and v6.get('pendenza_pct') is None, str(v6), grave=True)
+    urllib.request.urlopen = _dem_tutto
+    r7 = PR.pendenza([part(70, 1), part(70, 2)], fonte='opentopo', punti_max=4)
+    t('controprova: DEM completo -> verificata',
+      r7['particelle']['70_1']['verificata'] is True, str(r7['particelle']['70_1']), grave=True)
+finally:
+    urllib.request.urlopen, PR.time.sleep = _vq, _vs
 
 print('\n' + '=' * 72)
 print(f'  RISULTATO: {OK}/{OK+FAIL} pass   ·   {FAIL} FAIL ({len(GRAVI)} gravi)')

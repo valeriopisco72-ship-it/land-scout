@@ -65,6 +65,44 @@ def con_rete(parcels, rd):
             for i, p in parcels.items()}
 
 
+def con_pendenza(parcels, _pendenza=None):
+    """Misura la pendenza sul poligono catastale dove manca (prossimita.pendenza:
+    TINITALY 10 m, ripiego opentopodata). Ritorna (parcels, note).
+
+    Il dossier non la misurava: la raccomandazione girava con `slope=None` — e oltre
+    il 15% l'agriPV non si fa. DEM muto o poligono assente: la pendenza resta None
+    (NON verificata, mai assunta buona) e una nota lo dice. Non alza.
+    """
+    note = []
+    da_misurare = {i: p for i, p in parcels.items() if p.get('slope') is None}
+    senza_poly = [i for i, p in da_misurare.items() if not p.get('anello')]
+    for i in senza_poly:
+        note.append(f'{i}: pendenza NON verificata (manca il poligono catastale)')
+    part = [{'fg': 'p', 'pla': i, 'poly': p['anello']}
+            for i, p in da_misurare.items() if p.get('anello')]
+    if not part:
+        return parcels, note
+    try:
+        if _pendenza is None:
+            # timeout corto: il dossier e' interattivo (pagina web), e con TINITALY
+            # appeso 5 campioni x 60 s a particella fermerebbero tutto per minuti
+            from landscout.prossimita import pendenza
+            r = pendenza(part, timeout=20)
+        else:
+            r = _pendenza(part)
+    except Exception as e:
+        note.append(f'pendenza NON verificata ({type(e).__name__}): DEM non raggiunto')
+        return parcels, note
+    out = dict(parcels)
+    for x in part:
+        v = (r.get('particelle') or {}).get(f"p_{x['pla']}") or {}
+        if v.get('verificata') and v.get('pendenza_pct') is not None:
+            out[x['pla']] = dict(parcels[x['pla']], slope=v['pendenza_pct'])
+        else:
+            note.append(f"{x['pla']}: pendenza NON verificata (DEM muto su questa particella)")
+    return out, note
+
+
 def solidita(parcels, vinc, tech):
     """Forbice di verifica per particella (vedi forbice.py): quanto regge il voto se
     le fonti che non hanno risposto rispondessero male. Nel dossier e' la risposta
@@ -124,6 +162,9 @@ def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=Tru
     from landscout.catasto import arricchisci as arricchisci_catasto
     parcels, note_catasto = arricchisci_catasto(parcels)
     avvisi_luogo = list(avvisi_luogo) + note_catasto
+    # 0-ter. pendenza sul poligono: senza, ogni raccomandazione agriPV ignorava il 15%
+    parcels, note_pend = con_pendenza(parcels)
+    avvisi_luogo += note_pend
 
     # contesto nodo dal registro rete: se il nodo non e' noto -> {} (nessuna affermazione inventata)
     if node is None:

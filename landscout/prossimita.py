@@ -289,8 +289,13 @@ def pendenza(particelle, dataset='srtm30m', timeout=90, punti_max=100, fonte='ti
     out = {}
     for k, i0, n, p in indice:
         qs = [q for q in quote[i0:i0 + n] if q is not None]
-        if len(qs) < 3:
-            out[k] = {'pendenza_pct': None, 'verificata': False}
+        # ⚠ 28/09/2026: prima bastavano 3 quote su n. Una particella a cavallo di un
+        # blocco di richieste fallito teneva solo i punti dell'altro blocco — magari tutti
+        # dal lato piano — e usciva "verificata" con il dislivello sottostimato. Una
+        # pendenza e' un massimo: senza tutti i punti non e' misurata.
+        if len(qs) < max(3, n):
+            out[k] = {'pendenza_pct': None, 'verificata': False,
+                      'quote': f'{len(qs)}/{n}'}
             continue
         m = M(p['poly'][:12])
         estensione = max(math.dist(a, b) for a in m for b in m) if len(m) > 1 else 1

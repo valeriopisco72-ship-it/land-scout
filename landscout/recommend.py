@@ -208,7 +208,7 @@ DEMO = {
 # un terreno in Puglia si sentiva dire "coda FV vuota, 699 MW BESS" = i numeri di Morcone.
 _NODE_DEMO_MORCONE = {'pv_queue': False, 'bess_queue_mw': 699}
 
-def main():
+def main(argv=None):
     try: sys.stdout.reconfigure(encoding='utf-8')
     except Exception: pass
     ap = argparse.ArgumentParser()
@@ -217,7 +217,7 @@ def main():
     ap.add_argument('--comune', help='comune del nodo, per leggere le code dal registro rete')
     ap.add_argument('--prov', help='sigla provincia (obbligatoria con --comune)')
     ap.add_argument('--out')
-    A = ap.parse_args()
+    A = ap.parse_args(argv)
     if A.demo:
         print('=' * 78 + '\n  RACCOMANDAZIONE TECNOLOGIA — casi tipo (nodo Morcone: no coda FV, 699 MW BESS)\n' + '=' * 78)
         for pid, p in DEMO.items():
@@ -239,12 +239,13 @@ def main():
                   '(prima qui veniva applicato per sbaglio il nodo di Morcone)')
         d = json.load(open(A.scan, encoding='utf-8'))
         recs = d.get('risultati', []) if isinstance(d, dict) else list(d or [])
+        # ⚠ 28/09/2026: la riga si traduceva qui a mano, con `habitat_ban` e `in_sic`
+        # a False per default (= "verificato sgombro") e senza PAI: una riga dentro
+        # ZPS senza habitat usciva "RACCOMANDATO, classe A", una frana P4 idem.
+        # La conversione e' una sola, a tre stati, ed e' quella della forbice.
+        from landscout.forbice import da_riga_scan
         for r in recs:
-            p = {'ha': r.get('ha', 0), 'slope': r.get('slope'),
-                 'zps_pct': r.get('n2k_pct', 0), 'zps_border_m': r.get('n2k_border_m') or 9e9,
-                 'habitat_ban': r.get('habitat_ban', False), 'in_sic': r.get('in_sic', False),
-                 'd_se_m': r.get('d_se_m', 9e9), 'd_150kv_m': r.get('d_150kv_m', 9e9)}
-            r['reco'] = recommend(p, node)
+            r['reco'] = recommend(da_riga_scan(r), node)
         outp = A.out or (A.scan.replace('.json', '') + '_reco.json')
         json.dump(d, open(outp, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print('salvato:', outp, f'({len(recs)} particelle con raccomandazione)')

@@ -534,6 +534,74 @@ out, e, log = cli(['--scan', vecchio])
 t('uno scan vecchio (senza forbice) si ricalcola, e lo dice',
   e is None and bool(out) and 'ricalcolat' in log.lower(), repr(e) + log[-200:], grave=True)
 
+print('\n[14b] dossier: la pendenza si misura sul poligono catastale, se c e')
+
+cp_ = getattr(D, 'con_pendenza', None)
+t('dossier espone con_pendenza', callable(cp_), grave=True)
+if callable(cp_):
+    chieste = []
+
+    def pend_finta(part):
+        chieste.extend(x['pla'] for x in part)
+        return {'particelle': {f"{x['fg']}_{x['pla']}": {'pendenza_pct': 4.2, 'verificata': True}
+                               for x in part}}
+
+    pp = {'a': {'ha': 1.0, 'anello': quad(41.30, 14.60)},
+          'b': {'ha': 1.0, 'anello': quad(41.31, 14.60), 'slope': 7.0},
+          'c': {'ha': 1.0, 'lat': 41.32, 'lon': 14.60}}
+    q, note = cp_(pp, _pendenza=pend_finta)
+    t('misurata dove manca e c e il poligono', q['a'].get('slope') == 4.2, str(q['a']),
+      grave=True)
+    t('non sovrascrive la pendenza gia fornita', q['b']['slope'] == 7.0 and 'b' not in chieste,
+      f"{q['b']} {chieste}", grave=True)
+    t('senza poligono resta None, e lo dice', q['c'].get('slope') is None
+      and any('c' in n and 'pendenza' in n for n in note), str(note), grave=True)
+
+    q, note = cp_({'a': {'ha': 1.0, 'anello': quad(41.30, 14.60)}},
+                  _pendenza=lambda part: {'particelle': {f"{x['fg']}_{x['pla']}":
+                                                         {'pendenza_pct': None, 'verificata': False}
+                                                         for x in part}})
+    t('DEM muto: nessuna pendenza inventata', q['a'].get('slope') is None, str(q['a']),
+      grave=True)
+
+    def pend_rotta(part):
+        raise OSError('TINITALY giu')
+    q, note = cp_({'a': {'ha': 1.0, 'anello': quad(41.30, 14.60)}}, _pendenza=pend_rotta)
+    t('guasto del servizio: nessuna eccezione, una nota',
+      q['a'].get('slope') is None and any('pendenza' in n for n in note), str(note), grave=True)
+
+print('\n[15] recommend --scan legge la riga con la stessa conversione (tre stati, PAI)')
+
+righe_rec = [
+    {'com': 'X000', 'fg': '1', 'pla': '1', 'ha': 3.0, 'slope': 3.0, 'n2k_pct': 0.0,
+     'n2k_incompleto': False, 'pai_fr': 4, 'pai_idr': 0, 'pai_incompleto': False,
+     'habitat_ban': False, 'd_se_m': 500, 'd_150kv_m': 400},
+    # riga scritta a mano, senza habitat: non e' "habitat verificato sgombro"
+    {'com': 'X000', 'fg': '1', 'pla': '2', 'ha': 3.0, 'slope': 3.0, 'n2k_pct': 50.0,
+     'pai_fr': -1, 'pai_idr': 0, 'd_se_m': 500, 'd_150kv_m': 400},
+]
+f_in = os.path.join(tempfile.mkdtemp(), 'rec.json')
+f_out = f_in.replace('.json', '_out.json')
+json.dump({'tech': 'agriPV', 'risultati': righe_rec}, open(f_in, 'w', encoding='utf-8'))
+buf, vero = io.StringIO(), sys.stdout
+e = None
+try:
+    sys.stdout = buf
+    R.main(['--scan', f_in, '--out', f_out])
+except Exception as ex:          # noqa: BLE001
+    e = ex
+finally:
+    sys.stdout = vero
+t('recommend.main accetta argv e gira', e is None and os.path.exists(f_out), repr(e),
+  grave=True)
+if os.path.exists(f_out):
+    rec = {r['pla']: r['reco'] for r in json.load(open(f_out, encoding='utf-8'))['risultati']}
+    t('frana P4 nella riga: nessuna tecnologia consigliata', rec['1']['top'] is None,
+      str(rec['1']['top']), grave=True)
+    agri2 = next(x for x in rec['2']['ranking'] if x['tech'] == 'agriPV')
+    t('riga senza habitat, dentro ZPS: agriPV bloccato (habitat non verificato), non VINCA',
+      agri2.get('classe') == 'D', str(agri2), grave=True)
+
 print('\n' + '=' * 72)
 print(f'  RISULTATO: {OK}/{OK+FAIL} pass   ·   {FAIL} FAIL ({len(GRAVI)} gravi)')
 if GRAVI:
