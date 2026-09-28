@@ -128,6 +128,83 @@ def collezione(particelle, comune=''):
     return {'type': 'FeatureCollection', 'features': feats}, scartate
 
 
+# ------------------------------------------------------------------ scan
+# Lo scan produceva JSON e CSV: una graduatoria da leggere a mano, senza poterla
+# sovrapporre a nulla. Qui ogni particella esce col suo poligono, colorata per
+# classe, e con la FORBICE di verifica fra le proprieta': in QGIS si filtra
+# "fragile = true" e si vede subito dove il voto alto poggia su una fonte muta.
+_COLORE_CLASSE = {'A': '#1a8a3a', 'B': '#7cc242', 'C': '#ff8a3c', 'D': '#c62828'}
+_GRIGIO = '#9e9e9e'
+# contorno scuro e spesso = voto alto che una verifica mancante puo' far crollare
+_FRAGILE = '#212121'
+
+
+def _proprieta_scan(r):
+    fb = r.get('forbice') or {}
+    fragile = bool(fb.get('bloccanti_ignoti'))
+    colore = _COLORE_CLASSE.get(r.get('classe'), _GRIGIO)
+    d_se = r.get('d_se_m')
+    pr = {
+        'particella': r.get('pla'),
+        'foglio': r.get('fg'),
+        'comune_catastale': r.get('com'),
+        'ha': r.get('ha'),
+        'voto': r.get('voto'),
+        'classe': r.get('classe'),
+        'voto_peggiore': fb.get('voto_peggiore'),
+        'voto_migliore': fb.get('voto_migliore'),
+        'verifica_prima': fb.get('verifica_prima'),
+        'fragile': fragile,
+        'n2k_pct': r.get('n2k_pct'),
+        'n2k_incompleto': r.get('n2k_incompleto'),
+        'pai_fr': r.get('pai_fr'),
+        'pai_idr': r.get('pai_idr'),
+        'pai_incompleto': r.get('pai_incompleto'),
+        'slope': r.get('slope'),
+        # la sentinella 9e9 non e' una distanza: in QGIS diventerebbe un numero vero
+        'd_se_m': d_se if (d_se is not None and d_se < 9e8) else None,
+        'habitat_ban': r.get('habitat_ban'),
+        'flags': ' | '.join(r.get('flags') or []) or None,
+        'fill': colore,
+        'fill-opacity': 0.5,
+        'stroke': _FRAGILE if fragile else colore,
+        'stroke-width': 4 if fragile else 1,
+    }
+    # i None restano solo dove SIGNIFICANO qualcosa (non verificato): le chiavi di
+    # verifica si tengono anche vuote, il resto no
+    tieni = {'voto_peggiore', 'voto_migliore', 'verifica_prima', 'n2k_pct', 'pai_fr',
+             'pai_idr', 'habitat_ban', 'slope'}
+    return {k: v for k, v in pr.items() if v is not None or k in tieni}
+
+
+def collezione_scan(righe):
+    """Righe dello scan -> (FeatureCollection, scarti 'fg/pla' senza geometria usabile)."""
+    feats, scartate = [], []
+    for r in righe or []:
+        anello = anello_geojson(r.get('poly'))
+        if anello is None:
+            scartate.append(f"{r.get('fg')}/{r.get('pla')}")
+            continue
+        feats.append({'type': 'Feature',
+                      'geometry': {'type': 'Polygon', 'coordinates': [anello]},
+                      'properties': _proprieta_scan(r)})
+    return {'type': 'FeatureCollection', 'features': feats}, scartate
+
+
+def esporta_scan_geojson(righe, out_path, meta=None):
+    """Scrive l'esito di uno scan come GeoJSON. Ritorna (percorso, scarti)."""
+    fc, scartate = collezione_scan(righe)
+    fc['properties'] = dict(meta or {}, n_particelle=len(fc['features']),
+                            particelle_senza_geometria=scartate or None,
+                            fragili=sum(1 for f in fc['features'] if f['properties']['fragile']))
+    d = os.path.dirname(os.path.abspath(out_path))
+    if d:
+        os.makedirs(d, exist_ok=True)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(fc, f, ensure_ascii=False, separators=(',', ':'))
+    return out_path, scartate
+
+
 def esporta_geojson(blk, out_path, comune=''):
     """Scrive il blocco come GeoJSON. Ritorna (percorso, scarti)."""
     fc, scartate = collezione(blk.get('particelle'), comune)

@@ -162,7 +162,11 @@ def recommend(p, node=None):
                   'reasons': ['fuori ZPS: possibile ma richiede atlante vento + scala + distanza abitazioni (non valutato dal tool)']})
 
     # --- pick top fra le scorate non escluse ---
-    scored = [r for r in R if r.get('score') is not None and r['verdetto'] != 'ESCLUSO']
+    # ⚠ 28/09/2026: anche la classe D ("sconsigliato": un blocker trovato) entrava nella
+    # scelta — su una frana P4 la sintesi diceva "Tecnologia consigliata: agriPV (voto
+    # 2.5, classe D)". Una tecnologia bloccata non si consiglia: meglio nessuna.
+    scored = [r for r in R if r.get('score') is not None and r['verdetto'] != 'ESCLUSO'
+              and r.get('classe') != 'D']
     top = max(scored, key=lambda r: r['score']) if scored else None
     sint = ''
     if top:

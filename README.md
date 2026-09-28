@@ -7,7 +7,7 @@ individual cadastral parcels, aggregates them into contiguous blocks large enoug
 worth a developer's attention, and reports what would stop the project — before anyone
 spends money on it.
 
-49 modules · 15,000+ lines · **899 tests** across 26 files.
+50 modules · 16,000+ lines · **1,067 tests** across 29 files.
 
 Code and comments are in Italian: the domain is Italian law and Italian cadastral data,
 and translating the terminology would make the regulatory references harder to verify,
@@ -70,6 +70,33 @@ coordinate in this repository has been shifted off the real site.
 
 Then it aggregates: contiguous blocks, counterparty count, signatures required, portfolio
 of independent non-overlapping blocks from the same pool.
+
+## `forbice.py` — how much a score is worth when a source was silent
+
+The three-state rule stops the tool from *saying* "clean" when a source did not
+answer. It did not stop a ranking from *looking* clean: in a scan sorted by score, an
+8.2 built on a verified landslide layer and an 8.2 built on a landslide layer that
+never answered are the same number. The warning is there, at the end of a list of
+flags; the eye goes to the number.
+
+`forbice` ("the scissors") recomputes each parcel's score in the two extreme
+scenarios — every unanswered source unfavourable, every one favourable — and ranks
+the gaps by what they can do, blockers first:
+
+```
+F717 Fg.70 P.100   voto 8.0 [2.5–10.0] · verifica prima: PAI frane/idraulica (IdroGEO) (puo' bloccare)
+F717 Fg.70 P.101   voto 8.6 · robusto: tutte le fonti automatiche hanno risposto
+```
+
+It does not invent constraints and does not remove any: the score stays the engine's.
+It says how far the score can move and which check to redo first. Every scan row now
+carries it (JSON, CSV columns `voto_peggiore`/`voto_migliore`/`verifica_prima`), the
+dossier reports how many parcels are *fragile*, and the scan also writes a GeoJSON
+where fragile parcels have a thick dark outline — filter `fragile = true` in QGIS.
+
+```bash
+.venv/Scripts/python -m landscout.forbice --scan demo/scan_zonaA.json --top 20
+```
 
 ## `taratura.py` — the module I am most attached to
 

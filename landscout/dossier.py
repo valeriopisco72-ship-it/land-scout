@@ -41,10 +41,39 @@ def parcella_motore(p, v):
     if zpct is None and v.get('zps') is not None:
         zpct = 100.0 if v['zps'] else 0.0
     zbd = None if zpct is None else (-1 if zpct > 0 else 9e9)
-    return {'ha': p['ha'], 'slope': p.get('slope'),
-            'zps_pct': zpct, 'zps_border_m': zbd,
-            'habitat_ban': v.get('habitat_ban'), 'in_sic': v.get('sic'),
-            'd_se_m': p.get('d_se_m', 9e9), 'd_150kv_m': p.get('d_150kv_m', 9e9)}
+    ep = {'ha': p['ha'], 'slope': p.get('slope'),
+          'd_se_m': p.get('d_se_m', 9e9), 'd_150kv_m': p.get('d_150kv_m', 9e9)}
+    # ⚠ 28/09/2026: qui passavano solo ZPS e habitat. PAI, usi civici, bosco, fasce
+    # e art.136 — che feasibility aveva appena misurato — non arrivavano al motore:
+    # una particella su frana P4 (verdetto BLOCK_PAI) usciva "agriPV RACCOMANDATO,
+    # voto 10". to_score_fields e' la traduzione unica gia' esistente, con i tre stati.
+    ep.update(VC.to_score_fields(v))
+    ep.update({'zps_pct': zpct, 'zps_border_m': zbd,
+               'habitat_ban': v.get('habitat_ban'), 'in_sic': v.get('sic')})
+    return ep
+
+
+def con_rete(parcels, rd):
+    """Porta la distanza dalla SE misurata dal dossier (rete.distanza_rete, sul blocco)
+    alle particelle che non ne hanno una propria. ⚠ 28/09/2026: la distanza veniva
+    calcolata DOPO la raccomandazione e non arrivava al motore — ogni particella
+    prendeva -12 con "SE non individuata" mentre la sezione ③ dello stesso dossier
+    diceva "stazione a 300 m". Overpass giu' -> nessuna distanza inventata."""
+    if not (rd or {}).get('verificato') or rd.get('d_se_m') is None:
+        return parcels
+    return {i: (p if p.get('d_se_m') is not None else dict(p, d_se_m=rd['d_se_m']))
+            for i, p in parcels.items()}
+
+
+def solidita(parcels, vinc, tech):
+    """Forbice di verifica per particella (vedi forbice.py): quanto regge il voto se
+    le fonti che non hanno risposto rispondessero male. Nel dossier e' la risposta
+    alla domanda del proprietario: "posso fidarmi di questo esito?"."""
+    from landscout.forbice import forbice, compatta
+    per = {i: compatta(forbice(parcella_motore(parcels[i], vinc[i]), tech)) for i in parcels}
+    fragili = [i for i, f in per.items() if f['bloccanti_ignoti']]
+    return {'particelle': per, 'fragili': len(fragili), 'n': len(per),
+            'verifica_prima': per[fragili[0]]['verifica_prima'] if fragili else None}
 
 
 def vincoli_blocco(vinc):
@@ -104,10 +133,12 @@ def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=Tru
     vinc = VC.feasibility(parcels, prov=prov)
     cov = COPERTURA(prov)
 
-    # 2. tecnologia per particella
+    # 2. tecnologia per particella — con la distanza dalla rete gia' misurata
+    rete_dist = distanza_rete([(parcels[i]['lat'], parcels[i]['lon']) for i in ids])
+    p_motore = con_rete({i: parcels[i] for i in ids}, rete_dist)
     recos = {}
     for i in ids:
-        recos[i] = recommend(parcella_motore(parcels[i], vinc[i]), node)
+        recos[i] = recommend(parcella_motore(p_motore[i], vinc[i]), node)
 
     verdetti = Counter(vinc[i]['verdetto'] for i in ids)
     ha_ban = sum(parcels[i]['ha'] for i in ids if vinc[i].get('habitat_ban'))
@@ -119,6 +150,8 @@ def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=Tru
     n2k_ok = all(vinc[i].get('n2k_ok') is not False for i in ids)
     tech_dist = Counter(recos[i]['top'] for i in ids if recos[i]['top'])
     block_tech = tech or (tech_dist.most_common(1)[0][0] if tech_dist else 'agriPV')
+    # quanto regge l'esito se le fonti mute rispondessero male (forbice.py)
+    sol = solidita(p_motore, vinc, block_tech)
 
     # 3. resa energetica (PVGIS) — solo per tecnologie solari
     resa = resa_terreno(tot_ha, lat0, lon0, block_tech if block_tech in ('agriPV', 'PV') else 'agriPV')
@@ -137,9 +170,10 @@ def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=Tru
             'fattibilita': {'verdetti': dict(verdetti), 'ha_habitat_vietato': round(ha_ban, 2),
                             'usi_civici_n': uc, 'sitap_ok': sitap_ok,
                             'habitat_ok': habitat_ok, 'n2k_ok': n2k_ok, 'copertura': cov},
+            'solidita': sol,
             'tecnologia': {'consigliata': block_tech, 'distribuzione': dict(tech_dist)},
             'rete': nodo_info(comune, prov),
-            'rete_distanza': distanza_rete([(parcels[i]['lat'], parcels[i]['lon']) for i in ids]),
+            'rete_distanza': rete_dist,
             'resa': resa, 'valore_eur': val, 'aziende': aziende[:6],
             'vincoli_per_particella': {i: vinc[i]['verdetto'] for i in ids},
             'reco_per_particella': {i: recos[i]['top'] for i in ids}}
@@ -179,6 +213,14 @@ def print_dossier(d):
                   else (f'{f["usi_civici_n"]} particelle DA VERIFICARE' if f['usi_civici_n'] else '✅ nessuno (titolo libero)')))
         if manc:
             print(f'      controlli non disponibili in {reg}: {", ".join(manc)}')
+    sol = d.get('solidita')
+    if sol:
+        if sol['fragili']:
+            print(f"   Solidità dell esito: ⚠ {sol['fragili']}/{sol['n']} particelle con voto "
+                  f"FRAGILE — una fonte non raggiunta puo' bloccarle. Verifica prima: "
+                  f"{sol['verifica_prima']}")
+        else:
+            print('   Solidità dell esito: ✓ nessuna fonte muta puo\' ribaltare il voto')
     t = d['tecnologia']
     print('\n② TECNOLOGIA CONSIGLIATA')
     print(f'   ➜ {t["consigliata"].upper()}   (distribuzione particelle: {t["distribuzione"]})')

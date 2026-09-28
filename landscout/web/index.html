@@ -384,7 +384,10 @@ function render(d){
     <div class="r"><div class="k">Fonte habitat</div>${f.habitat_ok===false
       ?'<div class="v unk">non verificato — fonte habitat non raggiunta: il divieto 6210/6220 non è escluso</div>'
       :`<div class="v">${esc(cov.habitat_fonte||'—')}</div>`}</div>
-    ${f.n2k_ok===false?'<div class="r"><div class="k">Natura 2000</div><div class="v unk">non verificato — EEA non raggiunta</div></div>':''}</div>`;
+    ${f.n2k_ok===false?'<div class="r"><div class="k">Natura 2000</div><div class="v unk">non verificato — EEA non raggiunta</div></div>':''}
+    ${d.solidita?`<div class="r"><div class="k">Solidità</div>${d.solidita.fragili
+      ?`<div class="v unk"><b class="num">${d.solidita.fragili}</b>/${d.solidita.n} particelle con voto fragile — verifica prima: ${esc(d.solidita.verifica_prima)}</div>`
+      :'<div class="v">✓ nessuna fonte muta può ribaltare il voto</div>'}</div>`:''}</div>`;
   if(!cov.habitat_regionale) b+=`<div class="warn">Carta habitat regionale assente per ${esc(cov.regione||'questa regione')}:
     dato ISPRA 1:50.000 + corrispondenza ufficiale CORINE→Direttiva Habitat — <b>fondato ma indicativo</b>, conferma sulla cartografia regionale.</div>`;
   if(manc.length) b+=`<div class="warn unk">Controlli non disponibili in ${esc(cov.regione||'')}: <b>${manc.map(esc).join(', ')}</b>. Qui il tool non può dire "pulito" su questi layer.</div>`;

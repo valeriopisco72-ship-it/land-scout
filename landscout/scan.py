@@ -11,6 +11,8 @@ from landscout.engine import score_parcel, price_parcel, voto_10, m_per_deg
 from landscout.config import latlon, BAN_CODES
 # lo stesso validatore del percorso vincoli: un 200 con dentro un errore non e' un dato
 from landscout.vincoli import json_valido
+from landscout.forbice import forbice, compatta
+from landscout import gis as GIS
 from shapely.geometry import Polygon, LineString, Point, shape
 from shapely.ops import unary_union
 
@@ -348,6 +350,7 @@ def main(argv=None):
             if sit.get('fiume_150m') is not None and poly.intersects(sit['fiume_150m']): pdata['fascia_fiume'] = True
             pdata['paesaggio_incompleto'] = (not sit_ok)
         score, classe, flags = score_parcel(pdata, tech=A.tech)
+        score_motore = score
         # flag extra OSM
         if wood_u is not None and poly.intersects(wood_u):
             wpct = 100*poly.intersection(wood_u).area/poly.area
@@ -359,7 +362,15 @@ def main(argv=None):
             score = max(0, score - 10)
         if stream_buf is not None and poly.intersects(stream_buf):
             flags.append('entro 150 m da torrente OSM (lett. c solo se in elenchi)')
+        # ⚠ 28/09/2026: le penalita' OSM toccavano il punteggio ma non la classe —
+        # righe "voto 7,2 classe A". La classe si ricalcola sulle stesse soglie del
+        # motore; un bloccato (D) resta D.
+        if classe != 'D':
+            classe = 'A' if score >= 80 else ('B' if score >= 60 else 'C')
         voto = voto_10(score, classe)
+        # forbice di verifica: fin dove puo' muoversi questo voto se le fonti mute
+        # rispondessero male (o bene). Stesso aggiustamento OSM del voto.
+        fb = forbice(pdata, A.tech, aggiustamento=score - score_motore)
         prezzo = price_parcel(pdata, score, classe, tech=A.tech)
         rows.append({'com': p['com'], 'fg': p['fg'], 'pla': p['pla'], 'ha': round(p['ha'], 2),
                      'voto': voto, 'classe': classe, 'score': score,
@@ -388,6 +399,7 @@ def main(argv=None):
                      # non puo' riceverne l'esito. E' il ponte fra "trova la terra" e
                      # "costruisci il blocco" (vedi blocco.da_scan).
                      'poly': [(round(la, 6), round(lo, 6)) for la, lo in p['ring']],
+                     'forbice': compatta(fb),
                      'flags': flags})
     rows.sort(key=lambda r: (-r['voto'], -r['score'], -r['ha']))
 
@@ -410,10 +422,19 @@ def main(argv=None):
         cols = ['com', 'fg', 'pla', 'ha', 'voto', 'classe', 'score', 'd_se_m', 'd_150kv_m', 'slope',
                 'slope_eudem', 'n2k_pct', 'n2k_border_m', 'n2k_incompleto',
                 'pai_fr', 'pai_idr', 'pai_incompleto',
-                'eur_ha_target', 'tot_target', 'flags']
+                'eur_ha_target', 'tot_target',
+                'voto_peggiore', 'voto_migliore', 'verifica_prima', 'flags']
         w.writerow(cols)
         for r in rows:
-            w.writerow([r.get(c) if c != 'flags' else ' | '.join(r['flags']) for c in cols])
+            fbr = r.get('forbice') or {}
+            w.writerow([' | '.join(r['flags']) if c == 'flags'
+                        else (fbr.get(c) if c in ('voto_peggiore', 'voto_migliore', 'verifica_prima')
+                              else r.get(c)) for c in cols])
+    # il GeoJSON: la graduatoria sulla mappa (QGIS, geojson.io), fragili evidenziate
+    _, senza_geom = GIS.esporta_scan_geojson(rows, OUT + '.geojson',
+                                             meta={'bbox': A.bbox, 'tech': A.tech})
+    if senza_geom:
+        print(f'  ! {len(senza_geom)} particelle senza geometria usabile: escluse dal GeoJSON')
 
     print(f"\n=== TOP 15 su {len(rows)} particelle (tech {A.tech}) ===")
     print(f"{'particella':22s} {'ha':>5s} {'voto':>5s} {'cl':>2s} {'SE m':>6s} {'pend':>5s} {'N2K':>5s}")
@@ -421,7 +442,12 @@ def main(argv=None):
         print(f"{r['com']} Fg.{r['fg']:>3} P.{r['pla']:>5} {r['ha']:5.2f} {r['voto']:5.1f} {r['classe']:>2} "
           f"{r['d_se_m']:6d} {str(r['slope']):>5s} "
           + (f"{r['n2k_pct']:4.0f}%" if r['n2k_pct'] is not None else '  n.v.'))
-    print('\nsalvati:', OUT + '.json', '+ .csv')
+    fragili = [r for r in rows[:15] if (r.get('forbice') or {}).get('bloccanti_ignoti')]
+    if fragili:
+        print(f'\n⚠ {len(fragili)} delle prime 15 hanno un voto FRAGILE: una fonte muta puo\' '
+              f'bloccarle (verifica prima: {fragili[0]["forbice"]["verifica_prima"]}). '
+              f'Dettaglio: python -m landscout.forbice --scan {OUT}.json')
+    print('\nsalvati:', OUT + '.json', '+ .csv + .geojson')
 
 
 if __name__ == '__main__':
