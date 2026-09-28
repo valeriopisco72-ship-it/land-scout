@@ -316,6 +316,23 @@ def latlon(x, y):
         'Passare srsName=EPSG:4326 nella query.')
 
 
+def lonlat_gradi(x, y):
+    """Coppia (lon, lat) di un servizio che dichiara l'ordine standard -> (lat, lon).
+
+    Come `latlon`, ma per i siti che attraversano il CONFINE (Natura 2000 EEA):
+    un vertice a 6,3 E in Valle d'Aosta e' fuori dal riquadro Italia ma e' un
+    grado valido, non un CRS sbagliato. Si alza solo se la coppia non puo' essere
+    in gradi (tipico: metri EPSG:3857). ⚠ 28/09/2026: con `latlon` puro un sito
+    transfrontaliero faceva scartare l'intero layer.
+    """
+    try:
+        return latlon(x, y)
+    except CoordinataNonValida:
+        if -180.0 <= x <= 180.0 and -90.0 <= y <= 90.0:
+            return float(y), float(x)
+        raise
+
+
 def copertura(prov):
     """Cosa possiamo davvero verificare per questa provincia (mai assumere: dichiarare)."""
     reg = PROV_REGIONE.get(norm_prov(prov))

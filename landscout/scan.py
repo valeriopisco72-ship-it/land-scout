@@ -1,5 +1,7 @@
 """land-scout scan — screening di un'AREA ARBITRARIA (bbox) con voto 0-10.
 Uso: .venv/Scripts/python landscout/scan.py --bbox 42.3482,13.7424,42.3762,13.7794 --tech BESS --min-ha 0.5 --out demo/scan_zonaA
+     con i vincoli ufficiali: aggiungere  --vincoli --prov XX  (SITAP e carta habitat sono regionali)
+Esce: <out>.json, <out>.csv, <out>.geojson — ogni riga con la forbice di verifica (forbice.py).
 """
 import argparse, urllib.request, urllib.parse, json, math, os, re, sys, time, csv
 
@@ -8,7 +10,12 @@ BASE = str(Path(__file__).resolve().parent.parent)   # radice auto-rilevata (no 
 sys.path.insert(0, BASE)
 sys.stdout.reconfigure(encoding='utf-8')
 from landscout.engine import score_parcel, price_parcel, voto_10, m_per_deg
-from landscout.config import latlon
+from landscout.config import (latlon, lonlat_gradi, BAN_CODES, CORINE_BAN, CoordinataNonValida,
+                              copertura)
+# lo stesso validatore del percorso vincoli: un 200 con dentro un errore non e' un dato
+from landscout.vincoli import json_valido
+from landscout.forbice import forbice, compatta
+from landscout import gis as GIS
 from shapely.geometry import Polygon, LineString, Point, shape
 from shapely.ops import unary_union
 
@@ -34,8 +41,22 @@ def main(argv=None):
     ap.add_argument('--min-ha', type=float, default=0.5)
     ap.add_argument('--vincoli', action='store_true',
                     help='Fase 7: arricchisci ogni particella con vincoli UFFICIALI (habitat 6220 divieto FV, SIC, SITAP usi civici/tratturo/bosco/art136) → entra nel voto')
+    ap.add_argument('--prov', default=None,
+                    help='sigla provincia (es. BN): con --vincoli e\' OBBLIGATORIA — SITAP e '
+                         'Carta Habitat sono regionali, e fuori regione un layer vuoto non '
+                         'vuol dire "nessun vincolo"')
     ap.add_argument('--out', required=True)
     A = ap.parse_args(argv)   # argv=None -> sys.argv, come prima
+    # ⚠ 28/09/2026: senza provincia --vincoli usava SEMPRE i layer SITAP e la Carta
+    # Habitat della Campania. Fuori Campania quei layer tornano vuoti, e il vuoto
+    # diventava "verificato: nessun usi civici, nessun habitat vietato". Stesso
+    # rimedio del dossier (che ha tolto il default 'BN'): la regione va dichiarata.
+    if A.vincoli:
+        if not A.prov:
+            ap.error('--vincoli richiede --prov (sigla, es. BN): i layer SITAP e la carta '
+                     'habitat sono regionali')
+        if not copertura(A.prov).get('regione'):
+            ap.error(f'provincia "{A.prov}" non riconosciuta: serve una sigla valida (es. BN)')
     latmin, lonmin, latmax, lonmax = [float(x) for x in A.bbox.split(',')]
     LAT0 = (latmin + latmax) / 2
     MLAT, MLON = m_per_deg(LAT0)
@@ -92,7 +113,14 @@ def main(argv=None):
     print(f'particelle >= {A.min_ha} ha: {len(parc)}')
 
     # ---------- 2. Natura 2000 (EEA live, per bbox) ----------
+    # ⚠ 28/09/2026: se tutti i layer fallivano, `n2k_u` restava None e ogni
+    # particella usciva con zps_pct=0 — "verificato fuori ZPS" — in silenzio. Per
+    # l'agriPV e' la differenza fra un blocker e un terreno pulito. Stessa regola
+    # di vincoli.natura2000: basta un layer che risponde validamente; nessuno =
+    # NON verificato. E un anello che non e' in gradi (servizio che ignora outSR)
+    # non si proietta a caso: rende il dato non verificato.
     n2k_polys = []
+    n2k_risposte, n2k_errori, n2k_fuori_crs = 0, [], 0
     eea = 'https://bio.discomap.eea.europa.eu/arcgis/rest/services/ProtectedSites/Natura2000Sites/MapServer'
     for lyr in (0, 1, 2):
         p = {'f': 'json', 'geometry': f'{lonmin-0.02},{latmin-0.02},{lonmax+0.02},{latmax+0.02}',
@@ -100,16 +128,35 @@ def main(argv=None):
              'spatialRel': 'esriSpatialRelIntersects', 'outFields': 'SITECODE,SITENAME', 'where': '1=1',
              'returnGeometry': 'true'}
         try:
-            d = json.loads(get(f'{eea}/{lyr}/query?' + urllib.parse.urlencode(p)))
+            d = json_valido(get(f'{eea}/{lyr}/query?' + urllib.parse.urlencode(p)),
+                            'features', f'EEA layer {lyr}')
             for f in d.get('features', []):
-                code = f['attributes']['SITECODE']
-                for ringg in f['geometry']['rings']:
-                    n2k_polys.append((code, Polygon([to_xy(v[1], v[0]) for v in ringg])))
+                code = (f.get('attributes') or {}).get('SITECODE')
+                for ringg in (f.get('geometry') or {}).get('rings', []):
+                    # anello per anello: un vertice oltre confine (sito transfrontaliero)
+                    # e' un grado valido e passa; un anello in metri si CONTA e rende
+                    # Natura 2000 non verificata, invece di buttare il layer intero
+                    try:
+                        n2k_polys.append((code, Polygon([to_xy(*lonlat_gradi(v[0], v[1]))
+                                                         for v in ringg])))
+                    except CoordinataNonValida:
+                        n2k_fuori_crs += 1
+                    except Exception:
+                        pass            # anello degenere (<4 vertici): non e' un'area
+            n2k_risposte += 1
         except Exception as e:
+            n2k_errori.append(f'layer {lyr}: {str(e)[:60]}')
             print('EEA layer', lyr, 'fail:', str(e)[:60])
         time.sleep(0.4)
+    if n2k_fuori_crs:
+        n2k_errori.insert(0, f'{n2k_fuori_crs} anelli non in gradi (outSR ignorato?)')
+    n2k_ok = n2k_risposte > 0 and not n2k_fuori_crs
     n2k_u = unary_union([g for _, g in n2k_polys]) if n2k_polys else None
-    print('N2K: siti-anelli', len(n2k_polys), '| codici:', sorted({c for c, _ in n2k_polys}))
+    print('N2K: siti-anelli', len(n2k_polys), '| codici:', sorted({c for c, _ in n2k_polys}),
+          '' if n2k_ok else '| NON VERIFICATO')
+    if not n2k_ok:
+        print('ATTENZIONE: Natura 2000 NON verificato (' + '; '.join(n2k_errori[:2]) +
+              ') — le particelle usciranno con ZPS/SIC DA CONTROLLARE, non come fuori ZPS')
 
     # ---------- 3. PAI ----------
     # ⚠ `srsName` NON e' opzionale. Il bbox in urn:...EPSG::4326 dice al server in che
@@ -122,7 +169,10 @@ def main(argv=None):
         p = {'service': 'WFS', 'version': '2.0.0', 'request': 'GetFeature', 'typeNames': layer,
              'outputFormat': 'application/json', 'count': '1000', 'srsName': 'EPSG:4326',
              'bbox': f'{latmin-0.01},{lonmin-0.01},{latmax+0.01},{lonmax+0.01},urn:ogc:def:crs:EPSG::4326'}
-        return json.loads(get('https://idrogeo.isprambiente.it/geoserver/idrogeo/ows?' + urllib.parse.urlencode(p)))
+        # json_valido: un 200 con un ExceptionReport o un errore dentro alza, e il
+        # blocco sotto lo dichiara NON verificato (prima diventava "nessuna frana")
+        return json_valido(get('https://idrogeo.isprambiente.it/geoserver/idrogeo/ows?'
+                               + urllib.parse.urlencode(p)), 'features', layer)
 
     def geo2xy(geom):
         """GeoJSON -> piano metrico locale, con controllo del sistema di coordinate.
@@ -257,22 +307,36 @@ def main(argv=None):
         json.dump(dem, open(DEMC, 'w'))
 
     # ---------- 5b. vincoli ufficiali (Fase 7, opt-in --vincoli) ----------
-    sic_u = None; sit = {}; VINC = {}; sit_ok = True
+    sic_u = None; sit = {}; VINC = {}; sit_ok = True; sic_ok = False
     if A.vincoli:
         from landscout import vincoli as VC
-        plist = [{'id': f"{p['com']}_{p['fg']}_{p['pla']}", 'lat': p['c'][0], 'lon': p['c'][1], 'ha': p['ha']} for p in parc]
+        # `anello`: habitat_ban misura sul POLIGONO quando c'e' (la frazione vera, non
+        # lo 0/100 del centroide: un 6220 che entra da un bordo e' comunque un divieto)
+        plist = [{'id': f"{p['com']}_{p['fg']}_{p['pla']}", 'lat': p['c'][0], 'lon': p['c'][1],
+                  'ha': p['ha'], 'anello': p['ring']} for p in parc]
         print(f'Vincoli Fase 7 su {len(plist)} particelle: SITAP + SIC + habitat...')
-        # natura2000 ora ritorna anche n2k_ok: False = EEA non ha risposto -> NON e' "fuori da SIC"
+        # natura2000 ritorna anche ok: False = EEA non ha risposto -> NON e' "fuori da SIC".
+        # ⚠ il nome e' `sic_ok`, non `n2k_ok`: quello e' l'esito della ZPS al passo 2, e
+        # riassegnarlo qui poteva riaccendere come "verificata" una ZPS mai scaricata.
         try:
-            _, sic_u, n2k_ok = VC.natura2000(plist, to_xy)
-            if not n2k_ok:
+            _, sic_u, sic_ok = VC.natura2000(plist, to_xy)
+            if not sic_ok:
                 sic_u = None
                 print('  ! EEA non raggiunta: SIC NON verificato su questo scan (non assumere "fuori")')
-        except Exception as e: print('  ! natura2000:', e)
-        try: sit, sit_ok = VC.sitap_paesaggio(plist, to_xy)
-        except Exception as e: sit_ok = False; print('  ! sitap:', e)
+        except Exception as e: sic_ok = False; print('  ! natura2000:', e)
+        cov = copertura(A.prov)
+        if cov['sitap']:
+            try: sit, sit_ok = VC.sitap_paesaggio(plist, to_xy, regione=cov['regione'])
+            except Exception as e: sit_ok = False; print('  ! sitap:', e)
+        else:
+            sit, sit_ok = {}, False     # nessun layer mappato: NON verificato, non "pulito"
+            print(f"  ! SITAP non mappato per {cov['regione']}: usi civici/paesaggio NON verificati")
+        # carta habitat: regionale (codici Natura 2000) dove c'e', altrimenti il
+        # fallback nazionale ISPRA con la corrispondenza CORINE -> 6210/6220
+        ban_codes = BAN_CODES if cov['habitat_regionale'] else CORINE_BAN
         try:
-            VINC = VC.habitat_ban({x['id']: x for x in plist})
+            VINC = (VC.habitat_ban if cov['habitat_regionale'] else VC.habitat_ispra)(
+                {x['id']: x for x in plist})
             if VINC is None:                    # fonte non raggiunta: nessun habitat verificato
                 VINC = {}
                 print('  ! Carta Habitat non raggiunta: divieto habitat NON verificato su questo scan')
@@ -283,8 +347,11 @@ def main(argv=None):
     for p in parc:
         poly = p['poly']
         k = f"{p['com']}_{p['fg']}_{p['pla']}"
-        zpct = 100*poly.intersection(n2k_u).area/poly.area if (n2k_u is not None and poly.intersects(n2k_u)) else 0.0
-        zbd = poly.distance(n2k_u) if (n2k_u is not None and zpct == 0) else (-1 if zpct > 0 else 9e9)
+        if n2k_ok:
+            zpct = 100*poly.intersection(n2k_u).area/poly.area if (n2k_u is not None and poly.intersects(n2k_u)) else 0.0
+            zbd = poly.distance(n2k_u) if (n2k_u is not None and zpct == 0) else (-1 if zpct > 0 else 9e9)
+        else:
+            zpct = zbd = None           # EEA muta: "non controllato", non "fuori ZPS"
         # se il layer non e' stato scaricato, `None`: "non controllato" != "nessun vincolo"
         fr = max([c for g, c in pai_fr if poly.intersects(g)], default=-1) if pai_ok else None
         idr = max([l for g, l in pai_idr if poly.intersects(g)], default=0) if pai_ok else None
@@ -297,17 +364,28 @@ def main(argv=None):
                  'fascia_fiume': bool(fascia_fiume is not None and poly.intersects(fascia_fiume)),
                  'note_occupazione': None}
         if A.vincoli:
-            cod = VINC.get(k)
-            pdata['habitat'] = cod
-            pdata['habitat_ban'] = bool(cod and (cod.startswith('6220') or cod.startswith('6210')))
-            pdata['in_sic'] = bool(sic_u is not None and poly.intersects(sic_u))
+            # ⚠ 28/09/2026: dal 16/07 habitat_ban() restituisce {id: {'codici': {codice: %},
+            # 'geometria': ...}}, non piu' il codice come stringa. Qui si faceva ancora
+            # `cod.startswith('6220')` su un dict: AttributeError e scan --vincoli morto
+            # alla prima particella, appena la Carta Habitat rispondeva.
+            h = VINC.get(k)
+            codici = (h or {}).get('codici') or {}
+            pdata['habitat'] = max(codici, key=codici.get) if codici else None
+            ban_pct = sum(pct for c, pct in codici.items()
+                          if any(str(c).startswith(b) for b in ban_codes))
+            # nessuna voce per la particella = fonte non raggiunta -> None, non False
+            pdata['habitat_ban'] = (ban_pct > 0) if h is not None else None
+            pdata['in_sic'] = (bool(sic_u is not None and poly.intersects(sic_u))
+                               if sic_ok else None)
             for nm in ('usi_civici', 'bosco_142g', 'tratturo', 'art136'):
                 g = sit.get(nm)
-                pdata[nm] = bool(g is not None and poly.intersects(g))
+                # layer None = non verificato (host giu' o non mappato per la regione)
+                pdata[nm] = bool(poly.intersects(g)) if g is not None else None
             if sit.get('lago_300m') is not None and poly.intersects(sit['lago_300m']): pdata['fascia_lago'] = True
             if sit.get('fiume_150m') is not None and poly.intersects(sit['fiume_150m']): pdata['fascia_fiume'] = True
             pdata['paesaggio_incompleto'] = (not sit_ok)
         score, classe, flags = score_parcel(pdata, tech=A.tech)
+        score_motore = score
         # flag extra OSM
         if wood_u is not None and poly.intersects(wood_u):
             wpct = 100*poly.intersection(wood_u).area/poly.area
@@ -319,12 +397,23 @@ def main(argv=None):
             score = max(0, score - 10)
         if stream_buf is not None and poly.intersects(stream_buf):
             flags.append('entro 150 m da torrente OSM (lett. c solo se in elenchi)')
+        # ⚠ 28/09/2026: le penalita' OSM toccavano il punteggio ma non la classe —
+        # righe "voto 7,2 classe A". La classe si ricalcola sulle stesse soglie del
+        # motore; un bloccato (D) resta D.
+        if classe != 'D':
+            classe = 'A' if score >= 80 else ('B' if score >= 60 else 'C')
         voto = voto_10(score, classe)
+        # forbice di verifica: fin dove puo' muoversi questo voto se le fonti mute
+        # rispondessero male (o bene). Stesso aggiustamento OSM del voto.
+        fb = forbice(pdata, A.tech, aggiustamento=score - score_motore)
         prezzo = price_parcel(pdata, score, classe, tech=A.tech)
         rows.append({'com': p['com'], 'fg': p['fg'], 'pla': p['pla'], 'ha': round(p['ha'], 2),
                      'voto': voto, 'classe': classe, 'score': score,
                      'd_se_m': round(d_se), 'd_150kv_m': round(d_kv), 'slope': dem.get(k),
-                     'n2k_pct': round(zpct, 1), 'n2k_border_m': round(zbd) if 0 < zbd < 9e8 else None,
+                     'n2k_pct': round(zpct, 1) if zpct is not None else None,
+                     'n2k_border_m': round(zbd) if (zbd is not None and 0 < zbd < 9e8) else None,
+                     # come per il PAI: la cella vuota non basta, il flag esplicito si'
+                     'n2k_incompleto': not n2k_ok,
                      'pai_fr': fr, 'pai_idr': idr,
                      # ⚠️ 12/08/2026: la riga portava solo fr/idr, e quando il PAI
                      # non era verificato uscivano None -> nel CSV una CELLA VUOTA,
@@ -335,13 +424,17 @@ def main(argv=None):
                      'eur_ha_target': prezzo.get('eur_ha', {}).get('target'),
                      'tot_target': prezzo.get('totale_eur', {}).get('target'),
                      'lat': round(p['c'][0], 5), 'lon': round(p['c'][1], 5),
-                     'habitat': pdata.get('habitat'), 'habitat_ban': pdata.get('habitat_ban', False),
-                     'usi_civici': pdata.get('usi_civici', False), 'in_sic': pdata.get('in_sic', False),
+                     # ⚠ 28/09/2026: default None, non False. Senza --vincoli questi
+                     # controlli non girano, e `recommend --scan` leggeva il False
+                     # della riga come "verificato: nessun divieto habitat".
+                     'habitat': pdata.get('habitat'), 'habitat_ban': pdata.get('habitat_ban'),
+                     'usi_civici': pdata.get('usi_civici'), 'in_sic': pdata.get('in_sic'),
                      # il perimetro, non solo il centroide: senza questo lo scan resta una
                      # graduatoria da leggere a mano, e `blocco` — che lavora sui poligoni —
                      # non puo' riceverne l'esito. E' il ponte fra "trova la terra" e
                      # "costruisci il blocco" (vedi blocco.da_scan).
                      'poly': [(round(la, 6), round(lo, 6)) for la, lo in p['ring']],
+                     'forbice': compatta(fb),
                      'flags': flags})
     rows.sort(key=lambda r: (-r['voto'], -r['score'], -r['ha']))
 
@@ -362,18 +455,34 @@ def main(argv=None):
     with open(OUT + '.csv', 'w', newline='', encoding='utf-8-sig') as f:
         w = csv.writer(f, delimiter=';')
         cols = ['com', 'fg', 'pla', 'ha', 'voto', 'classe', 'score', 'd_se_m', 'd_150kv_m', 'slope',
-                'slope_eudem', 'n2k_pct', 'n2k_border_m', 'pai_fr', 'pai_idr', 'pai_incompleto',
-                'eur_ha_target', 'tot_target', 'flags']
+                'slope_eudem', 'n2k_pct', 'n2k_border_m', 'n2k_incompleto',
+                'pai_fr', 'pai_idr', 'pai_incompleto',
+                'eur_ha_target', 'tot_target',
+                'voto_peggiore', 'voto_migliore', 'verifica_prima', 'flags']
         w.writerow(cols)
         for r in rows:
-            w.writerow([r.get(c) if c != 'flags' else ' | '.join(r['flags']) for c in cols])
+            fbr = r.get('forbice') or {}
+            w.writerow([' | '.join(r['flags']) if c == 'flags'
+                        else (fbr.get(c) if c in ('voto_peggiore', 'voto_migliore', 'verifica_prima')
+                              else r.get(c)) for c in cols])
+    # il GeoJSON: la graduatoria sulla mappa (QGIS, geojson.io), fragili evidenziate
+    _, senza_geom = GIS.esporta_scan_geojson(rows, OUT + '.geojson',
+                                             meta={'bbox': A.bbox, 'tech': A.tech})
+    if senza_geom:
+        print(f'  ! {len(senza_geom)} particelle senza geometria usabile: escluse dal GeoJSON')
 
     print(f"\n=== TOP 15 su {len(rows)} particelle (tech {A.tech}) ===")
     print(f"{'particella':22s} {'ha':>5s} {'voto':>5s} {'cl':>2s} {'SE m':>6s} {'pend':>5s} {'N2K':>5s}")
     for r in rows[:15]:
         print(f"{r['com']} Fg.{r['fg']:>3} P.{r['pla']:>5} {r['ha']:5.2f} {r['voto']:5.1f} {r['classe']:>2} "
-          f"{r['d_se_m']:6d} {str(r['slope']):>5s} {r['n2k_pct']:4.0f}%")
-    print('\nsalvati:', OUT + '.json', '+ .csv')
+          f"{r['d_se_m']:6d} {str(r['slope']):>5s} "
+          + (f"{r['n2k_pct']:4.0f}%" if r['n2k_pct'] is not None else '  n.v.'))
+    fragili = [r for r in rows[:15] if (r.get('forbice') or {}).get('bloccanti_ignoti')]
+    if fragili:
+        print(f'\n⚠ {len(fragili)} delle prime 15 hanno un voto FRAGILE: una fonte muta puo\' '
+              f'bloccarle (verifica prima: {fragili[0]["forbice"]["verifica_prima"]}). '
+              f'Dettaglio: python -m landscout.forbice --scan {OUT}.json')
+    print('\nsalvati:', OUT + '.json', '+ .csv + .geojson')
 
 
 if __name__ == '__main__':

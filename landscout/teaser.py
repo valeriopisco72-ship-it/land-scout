@@ -143,7 +143,8 @@ def html_teaser(t, immagini=(), data=''):
         righe.append(_riga('Terra con opzione firmata',
                            f"{_num(s['ha'], 2, ' ha')} ({_num(s['pct'], 0, '%')})",
                            f"firme ancora da raccogliere: {s['firme_mancanti']}"))
-    if t['d_se_m']:
+    # `is not None`: 0 m (sottostazione a ridosso) e' il caso migliore, non un buco
+    if t['d_se_m'] is not None:
         righe.append(_riga('Distanza dalla sottostazione', _num(t['d_se_m'] / 1000, 1, ' km'),
                            'misura su OSM, indicativa: il TICA lo fa il gestore'))
     if t['criticita'] is not None:

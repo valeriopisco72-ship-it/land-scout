@@ -29,6 +29,111 @@ from landscout.valore import valore as calcola_valore, descrivi as descrivi_valo
 from landscout.rete import (contesto_nodo, nodo as nodo_info, descrivi as descrivi_nodo,
                             distanza_rete, descrivi_distanza)
 
+def parcella_motore(p, v):
+    """Particella + risultato vincoli -> dict per recommend/engine.
+
+    zps_pct e' la frazione REALE di superficie in ZPS (overlay sul poligono
+    catastale); col solo centroide resta 0/100. ⚠ 28/09/2026: con l'EEA non
+    raggiunta (`zps` None) qui usciva 0.0 = "verificato fuori ZPS"; ora None,
+    e a valle diventa un avviso invece di una buona notizia.
+    """
+    zpct = v.get('zps_pct')
+    if zpct is None and v.get('zps') is not None:
+        zpct = 100.0 if v['zps'] else 0.0
+    zbd = None if zpct is None else (-1 if zpct > 0 else 9e9)
+    ep = {'ha': p['ha'], 'slope': p.get('slope'),
+          'd_se_m': p.get('d_se_m', 9e9), 'd_150kv_m': p.get('d_150kv_m', 9e9)}
+    # ⚠ 28/09/2026: qui passavano solo ZPS e habitat. PAI, usi civici, bosco, fasce
+    # e art.136 — che feasibility aveva appena misurato — non arrivavano al motore:
+    # una particella su frana P4 (verdetto BLOCK_PAI) usciva "agriPV RACCOMANDATO,
+    # voto 10". to_score_fields e' la traduzione unica gia' esistente, con i tre stati.
+    ep.update(VC.to_score_fields(v))
+    ep.update({'zps_pct': zpct, 'zps_border_m': zbd,
+               'habitat_ban': v.get('habitat_ban'), 'in_sic': v.get('sic')})
+    return ep
+
+
+def con_rete(parcels, rd):
+    """Porta la distanza dalla SE misurata dal dossier (rete.distanza_rete, sul blocco)
+    alle particelle che non ne hanno una propria. ⚠ 28/09/2026: la distanza veniva
+    calcolata DOPO la raccomandazione e non arrivava al motore — ogni particella
+    prendeva -12 con "SE non individuata" mentre la sezione ③ dello stesso dossier
+    diceva "stazione a 300 m". Overpass giu' -> nessuna distanza inventata."""
+    if not (rd or {}).get('verificato') or rd.get('d_se_m') is None:
+        return parcels
+    return {i: (p if p.get('d_se_m') is not None else dict(p, d_se_m=rd['d_se_m']))
+            for i, p in parcels.items()}
+
+
+def con_pendenza(parcels, _pendenza=None):
+    """Misura la pendenza sul poligono catastale dove manca (prossimita.pendenza:
+    TINITALY 10 m, ripiego opentopodata). Ritorna (parcels, note).
+
+    Il dossier non la misurava: la raccomandazione girava con `slope=None` — e oltre
+    il 15% l'agriPV non si fa. DEM muto o poligono assente: la pendenza resta None
+    (NON verificata, mai assunta buona) e una nota lo dice. Non alza.
+    """
+    note = []
+    da_misurare = {i: p for i, p in parcels.items() if p.get('slope') is None}
+    senza_poly = [i for i, p in da_misurare.items() if not p.get('anello')]
+    for i in senza_poly:
+        note.append(f'{i}: pendenza NON verificata (manca il poligono catastale)')
+    part = [{'fg': 'p', 'pla': i, 'poly': p['anello']}
+            for i, p in da_misurare.items() if p.get('anello')]
+    if not part:
+        return parcels, note
+    try:
+        if _pendenza is None:
+            # il dossier e' interattivo (pagina web): timeout corto per richiesta E
+            # budget totale per fonte, altrimenti con TINITALY appeso 5 campioni in
+            # fila a particella fermerebbero tutto per minuti
+            from landscout.prossimita import pendenza
+            r = pendenza(part, timeout=10, budget_s=45)
+        else:
+            r = _pendenza(part)
+    except Exception as e:
+        note.append(f'pendenza NON verificata ({type(e).__name__}): DEM non raggiunto')
+        return parcels, note
+    out = dict(parcels)
+    for x in part:
+        v = (r.get('particelle') or {}).get(f"p_{x['pla']}") or {}
+        if v.get('verificata') and v.get('pendenza_pct') is not None:
+            out[x['pla']] = dict(parcels[x['pla']], slope=v['pendenza_pct'])
+        else:
+            note.append(f"{x['pla']}: pendenza NON verificata (DEM muto su questa particella)")
+    return out, note
+
+
+def solidita(parcels, vinc, tech):
+    """Forbice di verifica per particella (vedi forbice.py): quanto regge il voto se
+    le fonti che non hanno risposto rispondessero male. Nel dossier e' la risposta
+    alla domanda del proprietario: "posso fidarmi di questo esito?"."""
+    from landscout.forbice import forbice, compatta
+    per = {i: compatta(forbice(parcella_motore(parcels[i], vinc[i]), tech)) for i in parcels}
+    fragili = [i for i, f in per.items() if f['bloccanti_ignoti']]
+    return {'particelle': per, 'fragili': len(fragili), 'n': len(per),
+            'verifica_prima': per[fragili[0]]['verifica_prima'] if fragili else None}
+
+
+def vincoli_blocco(vinc):
+    """Vincoli per particella -> vincoli del blocco, a tre stati.
+
+    True se il vincolo e' stato TROVATO su almeno una particella (un divieto
+    trovato vince sul dubbio); None se non e' stato trovato ma almeno una
+    particella non e' stata verificata; False solo se verificato ovunque.
+    Prima era `any(...)`: il None diventava False, e `valore.p_auth` scriveva
+    "fuori Natura 2000: iter ordinario" su un blocco che l'EEA non aveva visto.
+    """
+    def tre(k):
+        vals = [v.get(k) for v in vinc.values()]
+        if any(vals):
+            return True
+        return None if any(x is None for x in vals) else False
+    return {'zps': tre('zps'), 'sic': tre('sic'), 'habitat_ban': tre('habitat_ban'),
+            # usi civici: SITAP non raggiunto e' gia' dichiarato a parte (sitap_ok)
+            'usi_civici': any(v.get('usi_civici') is True for v in vinc.values())}
+
+
 def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=True):
     """comune/prov sono OPZIONALI: si ricavano dalle coordinate (geo.risolvi).
     Se l'utente li passa e non tornano, vincono le coordinate e si avvisa."""
@@ -58,6 +163,9 @@ def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=Tru
     from landscout.catasto import arricchisci as arricchisci_catasto
     parcels, note_catasto = arricchisci_catasto(parcels)
     avvisi_luogo = list(avvisi_luogo) + note_catasto
+    # 0-ter. pendenza sul poligono: senza, ogni raccomandazione agriPV ignorava il 15%
+    parcels, note_pend = con_pendenza(parcels)
+    avvisi_luogo += note_pend
 
     # contesto nodo dal registro rete: se il nodo non e' noto -> {} (nessuna affermazione inventata)
     if node is None:
@@ -67,38 +175,33 @@ def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=Tru
     vinc = VC.feasibility(parcels, prov=prov)
     cov = COPERTURA(prov)
 
-    # 2. tecnologia per particella
+    # 2. tecnologia per particella — con la distanza dalla rete gia' misurata
+    rete_dist = distanza_rete([(parcels[i]['lat'], parcels[i]['lon']) for i in ids])
+    p_motore = con_rete({i: parcels[i] for i in ids}, rete_dist)
     recos = {}
     for i in ids:
-        p = parcels[i]; v = vinc[i]
-        # zps_pct e' ora la frazione REALE di superficie in ZPS (overlay sul poligono
-        # catastale); col solo centroide resta 0/100 e il dossier lo dichiara.
-        zpct = v.get('zps_pct')
-        if zpct is None:
-            zpct = 100.0 if v.get('zps') else 0.0
-        ep = {'ha': p['ha'], 'slope': p.get('slope'),
-              'zps_pct': zpct, 'zps_border_m': -1 if zpct > 0 else 9e9,
-              'habitat_ban': v.get('habitat_ban', False), 'in_sic': v.get('sic', False),
-              'd_se_m': p.get('d_se_m', 9e9), 'd_150kv_m': p.get('d_150kv_m', 9e9)}
-        recos[i] = recommend(ep, node)
+        recos[i] = recommend(parcella_motore(p_motore[i], vinc[i]), node)
 
     verdetti = Counter(vinc[i]['verdetto'] for i in ids)
     ha_ban = sum(parcels[i]['ha'] for i in ids if vinc[i].get('habitat_ban'))
     uc = sum(1 for i in ids if vinc[i].get('usi_civici') is True)
     sitap_ok = all(vinc[i].get('sitap_ok', True) for i in ids)
+    # "0 ha su habitat vietato" vale solo se la carta habitat ha risposto: senza,
+    # la stampa diceva "✅ non rilevato" su un controllo mai eseguito.
+    habitat_ok = all(vinc[i].get('habitat_ok') is not False for i in ids)
+    n2k_ok = all(vinc[i].get('n2k_ok') is not False for i in ids)
     tech_dist = Counter(recos[i]['top'] for i in ids if recos[i]['top'])
     block_tech = tech or (tech_dist.most_common(1)[0][0] if tech_dist else 'agriPV')
+    # quanto regge l'esito se le fonti mute rispondessero male (forbice.py)
+    sol = solidita(p_motore, vinc, block_tech)
 
     # 3. resa energetica (PVGIS) — solo per tecnologie solari
     resa = resa_terreno(tot_ha, lat0, lon0, block_tech if block_tech in ('agriPV', 'PV') else 'agriPV')
 
     # 4. valore — funzione di superficie + vincoli + tecnologia + copertura.
     #    (prima era 3 costanti di Morcone x ettari: stesso € ovunque in Italia)
-    vinc_blocco = {'zps': any(vinc[i].get('zps') for i in ids),
-                   'sic': any(vinc[i].get('sic') for i in ids),
-                   'habitat_ban': any(vinc[i].get('habitat_ban') for i in ids),
-                   'usi_civici': any(vinc[i].get('usi_civici') is True for i in ids)}
-    val = calcola_valore(tot_ha, vinc_blocco, tech=block_tech, copertura=cov, prov=prov)
+    val = calcola_valore(tot_ha, vincoli_blocco({i: vinc[i] for i in ids}),
+                         tech=block_tech, copertura=cov, prov=prov)
 
     # 5. aziende (sulla tecnologia dominante)
     aziende = match_companies(comune, prov, [lat0, lon0], block_tech, geo=geo)
@@ -107,10 +210,12 @@ def build_dossier(parcels, comune=None, prov=None, tech=None, node=None, geo=Tru
             'centroide': [round(lat0, 5), round(lon0, 5)],
             'avvisi_luogo': avvisi_luogo,
             'fattibilita': {'verdetti': dict(verdetti), 'ha_habitat_vietato': round(ha_ban, 2),
-                            'usi_civici_n': uc, 'sitap_ok': sitap_ok, 'copertura': cov},
+                            'usi_civici_n': uc, 'sitap_ok': sitap_ok,
+                            'habitat_ok': habitat_ok, 'n2k_ok': n2k_ok, 'copertura': cov},
+            'solidita': sol,
             'tecnologia': {'consigliata': block_tech, 'distribuzione': dict(tech_dist)},
             'rete': nodo_info(comune, prov),
-            'rete_distanza': distanza_rete([(parcels[i]['lat'], parcels[i]['lon']) for i in ids]),
+            'rete_distanza': rete_dist,
             'resa': resa, 'valore_eur': val, 'aziende': aziende[:6],
             'vincoli_per_particella': {i: vinc[i]['verdetto'] for i in ids},
             'reco_per_particella': {i: recos[i]['top'] for i in ids}}
@@ -126,9 +231,16 @@ def print_dossier(d):
     cov = f.get('copertura') or {}
     reg = cov.get('regione') or 'regione ignota'
     aut = cov.get('habitat_regionale')
-    print(f'   Habitat divieto FV: {f["ha_habitat_vietato"]} ha  →  '
-          + ('⛔ presente' if f['ha_habitat_vietato'] else '✅ non rilevato')
-          + f'   [fonte: {cov.get("habitat_fonte")}]')
+    if f['ha_habitat_vietato']:
+        esito_hab = '⛔ presente'
+    elif f.get('habitat_ok') is False:
+        esito_hab = '⚠ NON VERIFICATO (fonte habitat non raggiunta: il divieto non e escluso)'
+    else:
+        esito_hab = '✅ non rilevato'
+    print(f'   Habitat divieto FV: {f["ha_habitat_vietato"]} ha  →  {esito_hab}'
+          f'   [fonte: {cov.get("habitat_fonte")}]')
+    if f.get('n2k_ok') is False:
+        print('   Natura 2000 (ZPS/SIC): ⚠ NON VERIFICATO — EEA non raggiunta, confini da controllare')
     if not aut:
         print(f'      ⚠ carta regionale assente per {reg}: uso ISPRA 1:50.000 + corrispondenza ufficiale CORINE→Direttiva Habitat.')
         print('        Fondato ma a scala grossolana: conferma sulla cartografia regionale prima di decidere.')
@@ -143,6 +255,14 @@ def print_dossier(d):
                   else (f'{f["usi_civici_n"]} particelle DA VERIFICARE' if f['usi_civici_n'] else '✅ nessuno (titolo libero)')))
         if manc:
             print(f'      controlli non disponibili in {reg}: {", ".join(manc)}')
+    sol = d.get('solidita')
+    if sol:
+        if sol['fragili']:
+            print(f"   Solidità dell esito: ⚠ {sol['fragili']}/{sol['n']} particelle con voto "
+                  f"FRAGILE — una fonte non raggiunta puo' bloccarle. Verifica prima: "
+                  f"{sol['verifica_prima']}")
+        else:
+            print('   Solidità dell esito: ✓ nessuna fonte muta puo\' ribaltare il voto')
     t = d['tecnologia']
     print('\n② TECNOLOGIA CONSIGLIATA')
     print(f'   ➜ {t["consigliata"].upper()}   (distribuzione particelle: {t["distribuzione"]})')
@@ -151,6 +271,10 @@ def print_dossier(d):
         if in_zps:
             print('   Motivo: terra agricola in ZPS → eolico escluso (DM 2007), FV a terra vietato su agricolo '
                   '(D.Lgs 190/2024) → agriPV avanzato sopraelevato, via VINCA.')
+        elif f.get('n2k_ok') is False:
+            print('   Motivo: terra agricola → FV a terra vietato su agricolo (D.Lgs 190/2024) → agriPV '
+                  'avanzato. ⚠ Natura 2000 NON verificato: se fosse ZPS servirebbe la VINCA '
+                  'e l eolico sarebbe escluso.')
         else:
             print('   Motivo: terra agricola fuori Natura 2000 → FV a terra vietato su agricolo (D.Lgs 190/2024) '
                   '→ agriPV avanzato. Eolico: da valutare (serve atlante vento, non calcolato).')

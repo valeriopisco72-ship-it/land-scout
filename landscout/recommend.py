@@ -55,8 +55,12 @@ def _normalizza(p):
     q = dict(p or {})
     q['ha'] = _num(q.get('ha'), 0.0)
     q['slope'] = _num(q.get('slope'), None) if q.get('slope') is not None else None
-    q['zps_pct'] = _num(q.get('zps_pct'), 0.0)
-    q['zps_border_m'] = _num(q.get('zps_border_m'), 9e9)
+    # ⚠ 28/09/2026: la ZPS e' un VINCOLO, non una distanza, eppure qui "non so"
+    # diventava 0.0 = "verificato fuori ZPS" — e l'eolico usciva "fuori ZPS:
+    # possibile" su un terreno di cui l'EEA non aveva detto nulla. Resta None.
+    q['zps_pct'] = _num(q.get('zps_pct'), None)
+    q['zps_border_m'] = (_num(q.get('zps_border_m'), 9e9)
+                         if q['zps_pct'] is not None else None)
     q['d_se_m'] = _num(q.get('d_se_m'), 9e9)
     q['d_150kv_m'] = _num(q.get('d_150kv_m'), 9e9)
     # ⚠️ 12/08/2026: qui `bool(...)` ANNULLAVA la correzione del 16/07 scritta tre
@@ -82,7 +86,8 @@ def recommend(p, node=None):
         return {'top': None, 'opzioni': [],
                 'errore': 'superficie mancante o non valida: senza ettari non si puo\' '
                           'raccomandare una tecnologia'}
-    zps = p.get('zps_pct', 0) > 10
+    zps_ignota = p.get('zps_pct') is None
+    zps = not zps_ignota and p['zps_pct'] > 10
     # ⚠ QA 16/07: `bool(...)` trasformava None ("non verificato") in False ("nessun divieto")
     # = stesso schema del falso-pulito. Ora i tre stati restano tre: True / False / None.
     hab_ban = p.get('habitat_ban')
@@ -147,12 +152,21 @@ def recommend(p, node=None):
     if zps:
         R.append({'tech': 'eolico', 'score': None, 'verdetto': 'ESCLUSO',
                   'reasons': ['eolico vietato in ZPS (DM 17/10/2007)']})
+    elif zps_ignota:
+        R.append({'tech': 'eolico', 'score': None, 'verdetto': 'da valutare',
+                  'reasons': ['⚠ Natura 2000 NON verificato: se il terreno fosse in ZPS '
+                              'l\'eolico sarebbe vietato (DM 17/10/2007) — prima di tutto '
+                              'va controllato il confine ZPS']})
     else:
         R.append({'tech': 'eolico', 'score': None, 'verdetto': 'da valutare',
                   'reasons': ['fuori ZPS: possibile ma richiede atlante vento + scala + distanza abitazioni (non valutato dal tool)']})
 
     # --- pick top fra le scorate non escluse ---
-    scored = [r for r in R if r.get('score') is not None and r['verdetto'] != 'ESCLUSO']
+    # ⚠ 28/09/2026: anche la classe D ("sconsigliato": un blocker trovato) entrava nella
+    # scelta — su una frana P4 la sintesi diceva "Tecnologia consigliata: agriPV (voto
+    # 2.5, classe D)". Una tecnologia bloccata non si consiglia: meglio nessuna.
+    scored = [r for r in R if r.get('score') is not None and r['verdetto'] != 'ESCLUSO'
+              and r.get('classe') != 'D']
     top = max(scored, key=lambda r: r['score']) if scored else None
     sint = ''
     if top:
@@ -194,7 +208,7 @@ DEMO = {
 # un terreno in Puglia si sentiva dire "coda FV vuota, 699 MW BESS" = i numeri di Morcone.
 _NODE_DEMO_MORCONE = {'pv_queue': False, 'bess_queue_mw': 699}
 
-def main():
+def main(argv=None):
     try: sys.stdout.reconfigure(encoding='utf-8')
     except Exception: pass
     ap = argparse.ArgumentParser()
@@ -203,7 +217,7 @@ def main():
     ap.add_argument('--comune', help='comune del nodo, per leggere le code dal registro rete')
     ap.add_argument('--prov', help='sigla provincia (obbligatoria con --comune)')
     ap.add_argument('--out')
-    A = ap.parse_args()
+    A = ap.parse_args(argv)
     if A.demo:
         print('=' * 78 + '\n  RACCOMANDAZIONE TECNOLOGIA — casi tipo (nodo Morcone: no coda FV, 699 MW BESS)\n' + '=' * 78)
         for pid, p in DEMO.items():
@@ -224,13 +238,14 @@ def main():
             print('ℹ nessun --comune/--prov: raccomando senza contesto code di connessione '
                   '(prima qui veniva applicato per sbaglio il nodo di Morcone)')
         d = json.load(open(A.scan, encoding='utf-8'))
-        recs = d.get('risultati', d if isinstance(d, list) else [])
+        recs = d.get('risultati', []) if isinstance(d, dict) else list(d or [])
+        # ⚠ 28/09/2026: la riga si traduceva qui a mano, con `habitat_ban` e `in_sic`
+        # a False per default (= "verificato sgombro") e senza PAI: una riga dentro
+        # ZPS senza habitat usciva "RACCOMANDATO, classe A", una frana P4 idem.
+        # La conversione e' una sola, a tre stati, ed e' quella della forbice.
+        from landscout.forbice import da_riga_scan
         for r in recs:
-            p = {'ha': r.get('ha', 0), 'slope': r.get('slope'),
-                 'zps_pct': r.get('n2k_pct', 0), 'zps_border_m': r.get('n2k_border_m') or 9e9,
-                 'habitat_ban': r.get('habitat_ban', False), 'in_sic': r.get('in_sic', False),
-                 'd_se_m': r.get('d_se_m', 9e9), 'd_150kv_m': r.get('d_150kv_m', 9e9)}
-            r['reco'] = recommend(p, node)
+            r['reco'] = recommend(da_riga_scan(r), node)
         outp = A.out or (A.scan.replace('.json', '') + '_reco.json')
         json.dump(d, open(outp, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print('salvato:', outp, f'({len(recs)} particelle con raccomandazione)')

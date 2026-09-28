@@ -209,25 +209,40 @@ def _tinitaly(lat, lon, layer=TINITALY_SLOPE, d=0.0008, timeout=60):
     return v
 
 
-def pendenza_tinitaly(particelle, campioni=5, timeout=60):
+def pendenza_tinitaly(particelle, campioni=5, timeout=60, budget_s=None):
     """Pendenza per particella dal layer TINITALY (10 m), campionando pochi punti.
 
     Restituisce lo stesso formato di `pendenza()`, cosi' i due sono
     intercambiabili a valle. Una particella che il servizio non copre resta
     `verificata: False` — non 0%.
+
+    `budget_s`: tetto al tempo TOTALE. Il timeout e' per richiesta e i campioni
+    vanno in fila: con il servizio appeso dieci particelle costavano ~1.000 s
+    (28/09/2026). A budget esaurito le particelle restanti — e quella a meta' —
+    restano NON verificate.
     """
     out = {}
     letti = 0
+    t0 = time.time()
+    scaduto = lambda: budget_s is not None and time.time() - t0 > budget_s
     for p in particelle:
         k = f"{p['fg']}_{p['pla']}"
         anello = p['poly']
         cx = sum(q[0] for q in anello) / len(anello)
         cy = sum(q[1] for q in anello) / len(anello)
         pts = [(cx, cy)] + [tuple(q) for q in anello[:max(0, campioni - 1)]]
-        val = [v for v in (_tinitaly(a, b, timeout=timeout) for a, b in pts)
-               if v is not None]
-        if not val:
+        val, interrotta = [], False
+        for a, b in pts:
+            if scaduto():
+                interrotta = True
+                break
+            v = _tinitaly(a, b, timeout=timeout)
+            if v is not None:
+                val.append(v)
+        if interrotta or not val:
             out[k] = {'pendenza_pct': None, 'verificata': False}
+            if interrotta:
+                out[k]['motivo'] = 'tempo esaurito'
             continue
         letti += 1
         med = sum(val) / len(val)
@@ -244,7 +259,8 @@ def pendenza_tinitaly(particelle, campioni=5, timeout=60):
                      'sui vertici. Dove il servizio non copre resta NON verificata.')}
 
 
-def pendenza(particelle, dataset='srtm30m', timeout=90, punti_max=100, fonte='tinitaly'):
+def pendenza(particelle, dataset='srtm30m', timeout=90, punti_max=100, fonte='tinitaly',
+             budget_s=None):
     """Pendenza media per particella.
 
     `fonte='tinitaly'` (default) usa il DEM nazionale a 10 m con la pendenza gia'
@@ -256,7 +272,7 @@ def pendenza(particelle, dataset='srtm30m', timeout=90, punti_max=100, fonte='ti
     dire quali fondi sono fuori budget per movimento terra.
     """
     if fonte == 'tinitaly':
-        r = pendenza_tinitaly(particelle, timeout=min(timeout, 60))
+        r = pendenza_tinitaly(particelle, timeout=min(timeout, 60), budget_s=budget_s)
         if r['n_verificate']:
             return r
         # nessuna particella misurata: il servizio non risponde o non copre.
@@ -272,7 +288,10 @@ def pendenza(particelle, dataset='srtm30m', timeout=90, punti_max=100, fonte='ti
         campioni += pts
 
     quote = [None] * len(campioni)
+    t0 = time.time()
     for i in range(0, len(campioni), punti_max):
+        if budget_s is not None and time.time() - t0 > budget_s:
+            break               # le quote mancanti lasciano le particelle NON verificate
         blocco = campioni[i:i + punti_max]
         locs = '|'.join(f'{a},{b}' for a, b in blocco)
         url = f'https://api.opentopodata.org/v1/{dataset}?locations={urllib.parse.quote(locs, safe=",|")}'
@@ -289,8 +308,13 @@ def pendenza(particelle, dataset='srtm30m', timeout=90, punti_max=100, fonte='ti
     out = {}
     for k, i0, n, p in indice:
         qs = [q for q in quote[i0:i0 + n] if q is not None]
-        if len(qs) < 3:
-            out[k] = {'pendenza_pct': None, 'verificata': False}
+        # ⚠ 28/09/2026: prima bastavano 3 quote su n. Una particella a cavallo di un
+        # blocco di richieste fallito teneva solo i punti dell'altro blocco — magari tutti
+        # dal lato piano — e usciva "verificata" con il dislivello sottostimato. Una
+        # pendenza e' un massimo: senza tutti i punti non e' misurata.
+        if len(qs) < max(3, n):
+            out[k] = {'pendenza_pct': None, 'verificata': False,
+                      'quote': f'{len(qs)}/{n}'}
             continue
         m = M(p['poly'][:12])
         estensione = max(math.dist(a, b) for a in m for b in m) if len(m) > 1 else 1

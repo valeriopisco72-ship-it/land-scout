@@ -131,6 +131,16 @@ t('controprova: se forma.png esiste, viene referenziata in relativo',
 t('il disclaimer dichiara che non ci sono dati personali',
   'Nessun dato personale' in testo, grave=True)
 
+print('\n[Z] una sottostazione a 0 m e il caso MIGLIORE, non un dato mancante (28/09/2026)')
+
+adiacente = dict(D, bancabilita=dict(D['bancabilita'], d_se_m=0))
+p0 = TS.html_teaser(TS.raccogli(adiacente))
+t('d_se_m = 0: la riga della distanza c e (0,0 km)',
+  'Distanza dalla sottostazione' in p0 and ('0,0 km' in p0 or '0.0 km' in p0), grave=True)
+nulla = dict(D, bancabilita=dict(D['bancabilita'], d_se_m=None))
+t('controprova: d_se_m None -> nessuna distanza inventata',
+  'Distanza dalla sottostazione' not in TS.html_teaser(TS.raccogli(nulla)))
+
 print('\n' + '=' * 72)
 print(f'  RISULTATO: {OK}/{OK+FAIL} pass   ·   {FAIL} FAIL ({len(GRAVI)} gravi)')
 if GRAVI:
