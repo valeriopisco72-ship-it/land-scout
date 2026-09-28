@@ -1,5 +1,7 @@
 """land-scout scan — screening di un'AREA ARBITRARIA (bbox) con voto 0-10.
 Uso: .venv/Scripts/python landscout/scan.py --bbox 42.3482,13.7424,42.3762,13.7794 --tech BESS --min-ha 0.5 --out demo/scan_zonaA
+     con i vincoli ufficiali: aggiungere  --vincoli --prov XX  (SITAP e carta habitat sono regionali)
+Esce: <out>.json, <out>.csv, <out>.geojson — ogni riga con la forbice di verifica (forbice.py).
 """
 import argparse, urllib.request, urllib.parse, json, math, os, re, sys, time, csv
 
@@ -8,7 +10,8 @@ BASE = str(Path(__file__).resolve().parent.parent)   # radice auto-rilevata (no 
 sys.path.insert(0, BASE)
 sys.stdout.reconfigure(encoding='utf-8')
 from landscout.engine import score_parcel, price_parcel, voto_10, m_per_deg
-from landscout.config import latlon, lonlat_gradi, BAN_CODES, CoordinataNonValida
+from landscout.config import (latlon, lonlat_gradi, BAN_CODES, CORINE_BAN, CoordinataNonValida,
+                              copertura)
 # lo stesso validatore del percorso vincoli: un 200 con dentro un errore non e' un dato
 from landscout.vincoli import json_valido
 from landscout.forbice import forbice, compatta
@@ -38,8 +41,22 @@ def main(argv=None):
     ap.add_argument('--min-ha', type=float, default=0.5)
     ap.add_argument('--vincoli', action='store_true',
                     help='Fase 7: arricchisci ogni particella con vincoli UFFICIALI (habitat 6220 divieto FV, SIC, SITAP usi civici/tratturo/bosco/art136) → entra nel voto')
+    ap.add_argument('--prov', default=None,
+                    help='sigla provincia (es. BN): con --vincoli e\' OBBLIGATORIA — SITAP e '
+                         'Carta Habitat sono regionali, e fuori regione un layer vuoto non '
+                         'vuol dire "nessun vincolo"')
     ap.add_argument('--out', required=True)
     A = ap.parse_args(argv)   # argv=None -> sys.argv, come prima
+    # ⚠ 28/09/2026: senza provincia --vincoli usava SEMPRE i layer SITAP e la Carta
+    # Habitat della Campania. Fuori Campania quei layer tornano vuoti, e il vuoto
+    # diventava "verificato: nessun usi civici, nessun habitat vietato". Stesso
+    # rimedio del dossier (che ha tolto il default 'BN'): la regione va dichiarata.
+    if A.vincoli:
+        if not A.prov:
+            ap.error('--vincoli richiede --prov (sigla, es. BN): i layer SITAP e la carta '
+                     'habitat sono regionali')
+        if not copertura(A.prov).get('regione'):
+            ap.error(f'provincia "{A.prov}" non riconosciuta: serve una sigla valida (es. BN)')
     latmin, lonmin, latmax, lonmax = [float(x) for x in A.bbox.split(',')]
     LAT0 = (latmin + latmax) / 2
     MLAT, MLON = m_per_deg(LAT0)
@@ -307,10 +324,19 @@ def main(argv=None):
                 sic_u = None
                 print('  ! EEA non raggiunta: SIC NON verificato su questo scan (non assumere "fuori")')
         except Exception as e: sic_ok = False; print('  ! natura2000:', e)
-        try: sit, sit_ok = VC.sitap_paesaggio(plist, to_xy)
-        except Exception as e: sit_ok = False; print('  ! sitap:', e)
+        cov = copertura(A.prov)
+        if cov['sitap']:
+            try: sit, sit_ok = VC.sitap_paesaggio(plist, to_xy, regione=cov['regione'])
+            except Exception as e: sit_ok = False; print('  ! sitap:', e)
+        else:
+            sit, sit_ok = {}, False     # nessun layer mappato: NON verificato, non "pulito"
+            print(f"  ! SITAP non mappato per {cov['regione']}: usi civici/paesaggio NON verificati")
+        # carta habitat: regionale (codici Natura 2000) dove c'e', altrimenti il
+        # fallback nazionale ISPRA con la corrispondenza CORINE -> 6210/6220
+        ban_codes = BAN_CODES if cov['habitat_regionale'] else CORINE_BAN
         try:
-            VINC = VC.habitat_ban({x['id']: x for x in plist})
+            VINC = (VC.habitat_ban if cov['habitat_regionale'] else VC.habitat_ispra)(
+                {x['id']: x for x in plist})
             if VINC is None:                    # fonte non raggiunta: nessun habitat verificato
                 VINC = {}
                 print('  ! Carta Habitat non raggiunta: divieto habitat NON verificato su questo scan')
@@ -346,7 +372,7 @@ def main(argv=None):
             codici = (h or {}).get('codici') or {}
             pdata['habitat'] = max(codici, key=codici.get) if codici else None
             ban_pct = sum(pct for c, pct in codici.items()
-                          if any(str(c).startswith(b) for b in BAN_CODES))
+                          if any(str(c).startswith(b) for b in ban_codes))
             # nessuna voce per la particella = fonte non raggiunta -> None, non False
             pdata['habitat_ban'] = (ban_pct > 0) if h is not None else None
             pdata['in_sic'] = (bool(sic_u is not None and poly.intersects(sic_u))

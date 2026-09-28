@@ -205,7 +205,7 @@ try:
     V.natura2000 = finti['natura2000']
     V.sitap_paesaggio = finti['sitap_paesaggio']
     V.habitat_ban = spia_habitat
-    vin, logv, e = esegui(prepara('vinc'), get_ok, extra=['--vincoli'])
+    vin, logv, e = esegui(prepara('vinc'), get_ok, extra=['--vincoli', '--prov', 'BN'])
 finally:
     for k, fn in veri.items():
         setattr(V, k, fn)
@@ -225,6 +225,69 @@ if vin:
 t('habitat_ban riceve il POLIGONO della particella, non solo il centroide',
   all(v.get('anello') for v in ricevuti.values()) and len(ricevuti) == 2,
   str({k: bool(v.get('anello')) for k, v in ricevuti.items()}))
+
+print('\n[4b] scan --vincoli fuori Campania: layer e carta habitat della REGIONE giusta')
+
+# Lo scan interrogava sempre i layer SITAP con i nomi della Campania e la Carta
+# Habitat della Campania, qualunque fosse il bbox. In Abruzzo quei layer non tornano
+# nulla, e "nulla" diventava "verificato: nessun usi civici, nessun habitat vietato".
+# Il dossier aveva gia' chiuso la stessa porta togliendo il default 'BN'.
+try:
+    esegui(prepara('noprov'), get_ok, extra=['--vincoli'])
+    senza_prov = 'nessun errore'
+except SystemExit as ex:
+    senza_prov = f'exit {ex.code}'
+t('--vincoli senza --prov: errore chiaro, non layer della Campania a caso',
+  senza_prov == 'exit 2', senza_prov, grave=True)
+
+chiamate_v = {'sitap': [], 'hab_reg': 0, 'hab_ispra': 0}
+
+
+def sitap_spia(plist, to_xy, regione=None):
+    chiamate_v['sitap'].append(regione)
+    return ({}, True)
+
+
+def hab_reg_spia(parcels):
+    chiamate_v['hab_reg'] += 1
+    return {k: {'codici': {}, 'geometria': 'poligono'} for k in parcels}
+
+
+def hab_ispra_spia(parcels):
+    chiamate_v['hab_ispra'] += 1
+    return {k: {'codici': ({'34.5': 30.0} if k == K100 else {}), 'geometria': 'poligono'}
+            for k in parcels}
+
+
+veri = {k: getattr(V, k) for k in ('natura2000', 'sitap_paesaggio', 'habitat_ban', 'habitat_ispra')}
+try:
+    V.natura2000 = lambda plist, to_xy: (None, None, True)
+    V.sitap_paesaggio = sitap_spia
+    V.habitat_ban = hab_reg_spia
+    V.habitat_ispra = hab_ispra_spia
+    aq, logaq, e = esegui(prepara('aq'), get_ok, extra=['--vincoli', '--prov', 'AQ'])
+    chiamate_aq = dict(chiamate_v, sitap=list(chiamate_v['sitap']))
+    chiamate_v.update(sitap=[], hab_reg=0, hab_ispra=0)
+    bn, logbn, e2 = esegui(prepara('bn'), get_ok, extra=['--vincoli', '--prov', 'BN'])
+finally:
+    for k, fn in veri.items():
+        setattr(V, k, fn)
+t('Abruzzo: lo scan gira', e is None and bool(aq), repr(e), grave=True)
+t('Abruzzo: SITAP non mappato -> non interrogato con i layer campani',
+  chiamate_aq['sitap'] == [], str(chiamate_aq['sitap']), grave=True)
+if aq:
+    t('...e usi civici restano NON verificati (None), non "assenti"',
+      all(r.get('usi_civici') is None for r in aq), str([r.get('usi_civici') for r in aq]),
+      grave=True)
+    ra = {f"{r['com']}_{r['fg']}_{r['pla']}": r for r in aq}
+    t('Abruzzo: habitat dal fallback ISPRA (CORINE 34.5 -> 6220) -> divieto rilevato',
+      ra.get(K100, {}).get('habitat_ban') is True, str(ra.get(K100, {}).get('habitat_ban')),
+      grave=True)
+t('Abruzzo: la Carta Habitat della Campania NON viene usata',
+  chiamate_aq['hab_reg'] == 0 and chiamate_aq['hab_ispra'] == 1, str(chiamate_aq), grave=True)
+t('controprova Campania: SITAP con i layer CAMPANIA e carta regionale',
+  e2 is None and chiamate_v['sitap'] == ['CAMPANIA'] and chiamate_v['hab_reg'] == 1
+  and chiamate_v['hab_ispra'] == 0, str(chiamate_v), grave=True)
 
 # ------------------------------------------------------------------ cache
 print('\n[5] cache.cached_file: ttl_giorni=0 significa "sempre scaduto", non "mai"')
